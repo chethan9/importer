@@ -26,6 +26,7 @@ import { useFirebase } from "@/contexts/FirebaseContext";
 import type { ParsedFile } from "./UploadStep";
 import type { MappingConfig } from "./MappingStep";
 import { coerceValue } from "@/lib/coerce";
+import { resolveSourceValue } from "./MappingStep";
 import {
   createImportRecord,
   logImportedDocs,
@@ -310,8 +311,8 @@ async function processBatch(
     let rowHasError = false;
 
     for (const m of config.mappings) {
-      if (!m.sourceColumn || !m.targetField.trim()) continue;
-      const raw = row[m.sourceColumn];
+      if (m.source.kind === "skip" || !m.targetField.trim()) continue;
+      const raw = resolveSourceValue(m.source, row, rowIndex);
       const res = coerceValue(raw, m.firestoreType, { db, arrayElementType: m.arrayElementType });
       if (res.ok === false) {
         errors.push({ rowIndex, field: m.targetField, message: res.error });

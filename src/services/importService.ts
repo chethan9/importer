@@ -1,11 +1,17 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { FirestoreType, ArrayElementType } from "@/lib/coerce";
 
+export type MappingSource =
+  | { kind: "column"; column: string }
+  | { kind: "fixed"; value: string }
+  | { kind: "autoIncrement"; start: number; step: number }
+  | { kind: "skip" };
+
 export type ImportMapping = {
-  sourceColumn: string | null;
   targetField: string;
   firestoreType: FirestoreType;
   arrayElementType?: ArrayElementType;
+  source: MappingSource;
 };
 
 export type ImportMode = "create" | "merge";

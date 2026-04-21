@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { ArrowRight, ArrowLeft, AlertTriangle, CheckCircle2, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, AlertTriangle, CheckCircle2, Plus, Trash2, Hash, Columns3, Lock, MinusCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,16 +9,30 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { ImportMapping, ImportMode } from "@/services/importService";
+import { cn } from "@/lib/utils";
+import type { ImportMode } from "@/services/importService";
 import { FIRESTORE_TYPES, coerceValue, inferType, type FirestoreType, type ArrayElementType } from "@/lib/coerce";
 import type { ParsedFile } from "./UploadStep";
 import type { CollectionInfo } from "@/contexts/FirebaseContext";
 import { useFirebase } from "@/contexts/FirebaseContext";
 
+export type MappingSource =
+  | { kind: "column"; column: string }
+  | { kind: "fixed"; value: string }
+  | { kind: "autoIncrement"; start: number; step: number }
+  | { kind: "skip" };
+
+export type FieldMapping = {
+  targetField: string;
+  firestoreType: FirestoreType;
+  arrayElementType?: ArrayElementType;
+  source: MappingSource;
+};
+
 type DocIdStrategy = { kind: "auto" } | { kind: "column"; column: string };
 
 export type MappingConfig = {
-  mappings: ImportMapping[];
+  mappings: FieldMapping[];
   mode: ImportMode;
   docIdStrategy: DocIdStrategy;
 };
@@ -34,7 +48,7 @@ type Props = {
 
 export function MappingStep({ file, collection, value, onChange, onBack, onNext }: Props) {
   const { db } = useFirebase();
-  const [mappings, setMappings] = useState<ImportMapping[]>(() => value?.mappings ?? buildInitialMappings(file, collection));
+  const [mappings, setMappings] = useState<FieldMapping[]>(() => value?.mappings ?? buildInitialMappings(file, collection));
   const [mode, setMode] = useState<ImportMode>(value?.mode ?? "create");
   const [docIdStrategy, setDocIdStrategy] = useState<DocIdStrategy>(value?.docIdStrategy ?? { kind: "auto" });
 
@@ -42,8 +56,8 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
     onChange({ mappings, mode, docIdStrategy });
   }, [mappings, mode, docIdStrategy, onChange]);
 
-  const activeMappings = mappings.filter((m) => m.sourceColumn);
-  const duplicateTargets = findDuplicates(activeMappings.map((m) => m.targetField));
+  const activeMappings = mappings.filter((m) => m.source.kind !== "skip" && m.targetField.trim());
+  const duplicateTargets = findDuplicates(activeMappings.map((m) => m.targetField.trim()));
 
   const validationPreview = useMemo(() => {
     const sample = file.rows.slice(0, 20);
@@ -51,7 +65,7 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
     const errors: { row: number; field: string; msg: string }[] = [];
     sample.forEach((row, i) => {
       activeMappings.forEach((m) => {
-        const raw = row[m.sourceColumn!];
+        const raw = resolveSourceValue(m.source, row, i);
         const res = coerceValue(raw, m.firestoreType, { db: db ?? undefined, arrayElementType: m.arrayElementType });
         if (res.ok === false) {
           errorCount++;
@@ -59,17 +73,41 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
         }
       });
     });
-    return { errorCount, errors, totalChecked: sample.length * activeMappings.length };
+    return { errorCount, errors };
   }, [file.rows, activeMappings, db]);
 
-  function updateMapping(idx: number, patch: Partial<ImportMapping>) {
+  function updateMapping(idx: number, patch: Partial<FieldMapping>) {
     setMappings((prev) => prev.map((m, i) => (i === idx ? { ...m, ...patch } : m)));
   }
 
-  function addFieldMapping() {
+  function updateSource(idx: number, source: MappingSource) {
+    updateMapping(idx, { source });
+  }
+
+  function changeSourceKind(idx: number, kind: MappingSource["kind"]) {
+    const current = mappings[idx];
+    let next: MappingSource;
+    switch (kind) {
+      case "column":
+        next = { kind: "column", column: file.columns[0] ?? "" };
+        break;
+      case "fixed":
+        next = { kind: "fixed", value: "" };
+        break;
+      case "autoIncrement":
+        next = { kind: "autoIncrement", start: 1, step: 1 };
+        break;
+      default:
+        next = { kind: "skip" };
+    }
+    if (current.source.kind === kind) return;
+    updateSource(idx, next);
+  }
+
+  function addCustomField() {
     setMappings((prev) => [
       ...prev,
-      { sourceColumn: null, targetField: "", firestoreType: "string" },
+      { targetField: "", firestoreType: "string", source: { kind: "skip" } },
     ]);
   }
 
@@ -79,17 +117,20 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
 
   const canProceed =
     activeMappings.length > 0 &&
-    activeMappings.every((m) => m.targetField.trim().length > 0) &&
     duplicateTargets.length === 0 &&
-    (docIdStrategy.kind === "auto" || (docIdStrategy.kind === "column" && docIdStrategy.column));
+    activeMappings.every((m) => {
+      if (m.source.kind === "column") return !!m.source.column;
+      if (m.source.kind === "fixed") return m.source.value.trim().length > 0 || m.firestoreType === "null";
+      return true;
+    }) &&
+    (docIdStrategy.kind === "auto" || (docIdStrategy.kind === "column" && !!docIdStrategy.column));
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="font-heading text-2xl font-semibold">Map fields</h2>
+        <h2 className="font-heading text-2xl font-semibold">Map Firestore fields</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Match each source column to a Firestore field and pick its type. Values that don't match their type will be
-          logged and skipped.
+          Each Firestore field on the left — bind it to a CSV column, a fixed value, or an auto-incrementing counter.
         </p>
       </div>
 
@@ -112,9 +153,7 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
                 <RadioGroupItem value="merge" id="mode-merge" className="mt-0.5" />
                 <Label htmlFor="mode-merge" className="flex-1 cursor-pointer font-normal">
                   <div className="font-medium">Merge / upsert</div>
-                  <div className="text-xs text-muted-foreground">
-                    Update existing docs, create if missing. Pre-existing data is snapshotted for revert.
-                  </div>
+                  <div className="text-xs text-muted-foreground">Update existing, create if missing. Snapshotted for revert.</div>
                 </Label>
               </div>
             </RadioGroup>
@@ -165,92 +204,44 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-base">Field mappings</CardTitle>
+              <CardTitle className="text-base">Field bindings</CardTitle>
               <CardDescription>
-                {activeMappings.length} active · {file.columns.length} columns available
+                {activeMappings.length} of {mappings.length} field{mappings.length === 1 ? "" : "s"} will be written · {file.columns.length} CSV columns available
               </CardDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={addFieldMapping}>
-              <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Add field
+            <Button variant="outline" size="sm" onClick={addCustomField}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" /> Add field
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="grid grid-cols-[1fr_auto_1fr_1fr_auto] items-center gap-2 border-b pb-2 text-xs font-medium text-muted-foreground">
-            <div>Source column</div>
-            <div />
-            <div>Firestore field</div>
-            <div>Type</div>
-            <div />
-          </div>
+        <CardContent className="space-y-3">
           {mappings.map((m, idx) => (
-            <div key={idx} className="grid grid-cols-[1fr_auto_1fr_1fr_auto] items-center gap-2">
-              <Select
-                value={m.sourceColumn ?? "__skip__"}
-                onValueChange={(v) => updateMapping(idx, { sourceColumn: v === "__skip__" ? null : v })}
-              >
-                <SelectTrigger className="font-mono text-xs">
-                  <SelectValue placeholder="Skip" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__skip__" className="text-muted-foreground">— Skip —</SelectItem>
-                  {file.columns.map((c) => (
-                    <SelectItem key={c} value={c} className="font-mono text-xs">{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <ArrowRight className="h-4 w-4 text-muted-foreground" />
-              <Input
-                value={m.targetField}
-                onChange={(e) => updateMapping(idx, { targetField: e.target.value })}
-                placeholder="firestoreField"
-                className="font-mono text-xs"
-              />
-              <div className="flex gap-1">
-                <Select
-                  value={m.firestoreType}
-                  onValueChange={(v) => updateMapping(idx, { firestoreType: v as FirestoreType })}
-                >
-                  <SelectTrigger className="text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FIRESTORE_TYPES.map((t) => (
-                      <SelectItem key={t.value} value={t.value} className="text-xs">
-                        <div className="flex flex-col">
-                          <span>{t.label}</span>
-                          <span className="text-[10px] text-muted-foreground">{t.hint}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {m.firestoreType === "array" && (
-                  <Select
-                    value={m.arrayElementType ?? "string"}
-                    onValueChange={(v) => updateMapping(idx, { arrayElementType: v as ArrayElementType })}
-                  >
-                    <SelectTrigger className="w-24 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="string" className="text-xs">of String</SelectItem>
-                      <SelectItem value="number" className="text-xs">of Number</SelectItem>
-                      <SelectItem value="boolean" className="text-xs">of Boolean</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeMapping(idx)}>
-                <span className="text-lg">×</span>
-              </Button>
-            </div>
+            <FieldRow
+              key={idx}
+              mapping={m}
+              columns={file.columns}
+              sampleRow={file.rows[0] ?? {}}
+              isSkipped={m.source.kind === "skip"}
+              onField={(targetField) => updateMapping(idx, { targetField })}
+              onType={(firestoreType) => updateMapping(idx, { firestoreType })}
+              onArrayElType={(t) => updateMapping(idx, { arrayElementType: t })}
+              onSourceKind={(k) => changeSourceKind(idx, k)}
+              onSource={(s) => updateSource(idx, s)}
+              onRemove={() => removeMapping(idx)}
+            />
           ))}
+
+          {mappings.length === 0 && (
+            <div className="rounded-md border border-dashed bg-muted/30 p-8 text-center text-sm text-muted-foreground">
+              No fields yet. Add fields manually or go back and select a collection with inferred schema.
+            </div>
+          )}
+
           {duplicateTargets.length > 0 && (
-            <Alert variant="destructive" className="mt-3">
+            <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
-                Duplicate target fields: {duplicateTargets.map((d) => <code key={d} className="mx-1 font-mono text-xs">{d}</code>)}
+                Duplicate Firestore field names: {duplicateTargets.map((d) => <code key={d} className="mx-1 font-mono text-xs">{d}</code>)}
               </AlertDescription>
             </Alert>
           )}
@@ -267,7 +258,7 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
             )}
           </CardTitle>
           <CardDescription>
-            Checked first 20 rows · {validationPreview.errorCount} issues found
+            Checked first 20 rows · {validationPreview.errorCount} issue{validationPreview.errorCount === 1 ? "" : "s"} found
           </CardDescription>
         </CardHeader>
         {validationPreview.errors.length > 0 && (
@@ -290,11 +281,6 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
                 ))}
               </TableBody>
             </Table>
-            {validationPreview.errorCount > validationPreview.errors.length && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                …and {validationPreview.errorCount - validationPreview.errors.length} more. These rows will be skipped and logged.
-              </p>
-            )}
           </CardContent>
         )}
       </Card>
@@ -311,18 +297,222 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
   );
 }
 
-function buildInitialMappings(file: ParsedFile, collection: CollectionInfo): ImportMapping[] {
-  const existingFields = new Map<string, FirestoreType>();
-  collection.fields?.forEach((f) => existingFields.set(f.name, f.type as FirestoreType));
-  return file.columns.map((col) => {
-    const existing = existingFields.get(col);
-    const sampleValue = file.rows[0]?.[col];
-    return {
-      sourceColumn: col,
-      targetField: col,
-      firestoreType: existing ?? inferType(sampleValue),
-    };
+type FieldRowProps = {
+  mapping: FieldMapping;
+  columns: string[];
+  sampleRow: Record<string, unknown>;
+  isSkipped: boolean;
+  onField: (v: string) => void;
+  onType: (v: FirestoreType) => void;
+  onArrayElType: (v: ArrayElementType) => void;
+  onSourceKind: (k: MappingSource["kind"]) => void;
+  onSource: (s: MappingSource) => void;
+  onRemove: () => void;
+};
+
+function FieldRow({
+  mapping,
+  columns,
+  sampleRow,
+  isSkipped,
+  onField,
+  onType,
+  onArrayElType,
+  onSourceKind,
+  onSource,
+  onRemove,
+}: FieldRowProps) {
+  const src = mapping.source;
+  return (
+    <div className={cn("rounded-lg border bg-card p-3 transition-opacity", isSkipped && "opacity-60")}>
+      <div className="grid items-start gap-3 md:grid-cols-[1.1fr_0.9fr_1.5fr_auto]">
+        {/* Firestore field name + type */}
+        <div className="space-y-1.5">
+          <Label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Firestore field
+          </Label>
+          <Input
+            value={mapping.targetField}
+            onChange={(e) => onField(e.target.value)}
+            placeholder="fieldName"
+            className="h-9 font-mono text-xs"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Type</Label>
+          <div className="flex gap-1">
+            <Select value={mapping.firestoreType} onValueChange={(v) => onType(v as FirestoreType)}>
+              <SelectTrigger className="h-9 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FIRESTORE_TYPES.map((t) => (
+                  <SelectItem key={t.value} value={t.value} className="text-xs">
+                    <div className="flex flex-col">
+                      <span>{t.label}</span>
+                      <span className="text-[10px] text-muted-foreground">{t.hint}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {mapping.firestoreType === "array" && (
+              <Select value={mapping.arrayElementType ?? "string"} onValueChange={(v) => onArrayElType(v as ArrayElementType)}>
+                <SelectTrigger className="h-9 w-24 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="string" className="text-xs">of String</SelectItem>
+                  <SelectItem value="number" className="text-xs">of Number</SelectItem>
+                  <SelectItem value="boolean" className="text-xs">of Boolean</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        </div>
+
+        {/* Source */}
+        <div className="space-y-1.5">
+          <Label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Source</Label>
+          <div className="flex gap-1.5">
+            <Select value={src.kind} onValueChange={(v) => onSourceKind(v as MappingSource["kind"])}>
+              <SelectTrigger className="h-9 w-[150px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="column" className="text-xs">
+                  <span className="inline-flex items-center gap-1.5"><Columns3 className="h-3 w-3" /> CSV column</span>
+                </SelectItem>
+                <SelectItem value="fixed" className="text-xs">
+                  <span className="inline-flex items-center gap-1.5"><Lock className="h-3 w-3" /> Fixed value</span>
+                </SelectItem>
+                <SelectItem value="autoIncrement" className="text-xs">
+                  <span className="inline-flex items-center gap-1.5"><Hash className="h-3 w-3" /> Auto-increment</span>
+                </SelectItem>
+                <SelectItem value="skip" className="text-xs">
+                  <span className="inline-flex items-center gap-1.5 text-muted-foreground"><MinusCircle className="h-3 w-3" /> Skip</span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+
+            {src.kind === "column" && (
+              <div className="flex-1 space-y-1">
+                <Select value={src.column} onValueChange={(v) => onSource({ kind: "column", column: v })}>
+                  <SelectTrigger className="h-9 font-mono text-xs">
+                    <SelectValue placeholder="Select column" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {columns.map((c) => (
+                      <SelectItem key={c} value={c} className="font-mono text-xs">{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {src.column && (
+                  <div className="truncate font-mono text-[10px] text-muted-foreground">
+                    sample: {formatPreview(sampleRow[src.column])}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {src.kind === "fixed" && (
+              <Input
+                value={src.value}
+                onChange={(e) => onSource({ kind: "fixed", value: e.target.value })}
+                placeholder="Value for every doc"
+                className="h-9 flex-1 font-mono text-xs"
+              />
+            )}
+
+            {src.kind === "autoIncrement" && (
+              <div className="flex flex-1 gap-1.5">
+                <div className="flex-1">
+                  <Input
+                    type="number"
+                    value={src.start}
+                    onChange={(e) => onSource({ ...src, start: Number(e.target.value) || 0 })}
+                    placeholder="Start"
+                    className="h-9 font-mono text-xs"
+                  />
+                  <div className="mt-0.5 text-[10px] text-muted-foreground">Start</div>
+                </div>
+                <div className="flex-1">
+                  <Input
+                    type="number"
+                    value={src.step}
+                    onChange={(e) => onSource({ ...src, step: Number(e.target.value) || 1 })}
+                    placeholder="Step"
+                    className="h-9 font-mono text-xs"
+                  />
+                  <div className="mt-0.5 text-[10px] text-muted-foreground">
+                    preview: {src.start}, {src.start + src.step}, {src.start + src.step * 2}…
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {src.kind === "skip" && (
+              <div className="flex flex-1 items-center px-2 text-xs text-muted-foreground">
+                Field will be omitted
+              </div>
+            )}
+          </div>
+        </div>
+
+        <Button variant="ghost" size="icon" className="mt-5 h-9 w-9 text-muted-foreground hover:text-destructive" onClick={onRemove}>
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function resolveSourceValue(source: MappingSource, row: Record<string, unknown>, rowIndex: number): unknown {
+  switch (source.kind) {
+    case "column":
+      return row[source.column];
+    case "fixed":
+      return source.value;
+    case "autoIncrement":
+      return source.start + rowIndex * source.step;
+    case "skip":
+      return null;
+  }
+}
+
+function formatPreview(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—";
+  const s = String(v);
+  return s.length > 40 ? s.slice(0, 40) + "…" : s;
+}
+
+function buildInitialMappings(file: ParsedFile, collection: CollectionInfo): FieldMapping[] {
+  const columnSet = new Set(file.columns);
+  const rows: FieldMapping[] = [];
+
+  collection.fields?.forEach((f) => {
+    const matchingCol = columnSet.has(f.name) ? f.name : null;
+    rows.push({
+      targetField: f.name,
+      firestoreType: f.type as FirestoreType,
+      source: matchingCol ? { kind: "column", column: matchingCol } : { kind: "skip" },
+    });
   });
+
+  const mappedCols = new Set(rows.filter((r) => r.source.kind === "column").map((r) => (r.source as { column: string }).column));
+  file.columns.forEach((col) => {
+    if (!mappedCols.has(col) && !rows.find((r) => r.targetField === col)) {
+      const sample = file.rows[0]?.[col];
+      rows.push({
+        targetField: col,
+        firestoreType: inferType(sample),
+        source: { kind: "column", column: col },
+      });
+    }
+  });
+
+  return rows;
 }
 
 function findDuplicates(arr: string[]): string[] {
