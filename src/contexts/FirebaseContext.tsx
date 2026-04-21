@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useState, ReactNode } from "react";
 import type { FirebaseApp } from "firebase/app";
+import type { Auth } from "firebase/auth";
 import type { Firestore } from "firebase/firestore";
 import {
   FirebaseConfig,
@@ -8,6 +9,7 @@ import {
   teardownFirebase,
   inferCollectionSchema,
   saveLastConfig,
+  signInAnon,
 } from "@/lib/firebase";
 
 export type CollectionInfo = {
@@ -19,6 +21,8 @@ export type CollectionInfo = {
 type Ctx = {
   app: FirebaseApp | null;
   db: Firestore | null;
+  auth: Auth | null;
+  authUid: string | null;
   config: FirebaseConfig | null;
   connected: boolean;
   collections: CollectionInfo[];
@@ -37,6 +41,8 @@ const FirebaseCtx = createContext<Ctx | null>(null);
 export function FirebaseProvider({ children }: { children: ReactNode }) {
   const [app, setApp] = useState<FirebaseApp | null>(null);
   const [db, setDb] = useState<Firestore | null>(null);
+  const [auth, setAuth] = useState<Auth | null>(null);
+  const [authUid, setAuthUid] = useState<string | null>(null);
   const [config, setConfig] = useState<FirebaseConfig | null>(null);
   const [collections, setCollections] = useState<CollectionInfo[]>([]);
   const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
@@ -45,11 +51,19 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
   const connect = useCallback(
     async (c: FirebaseConfig) => {
       if (app) await teardownFirebase(app);
-      const { app: newApp, db: newDb } = initFirebase(c);
+      const { app: newApp, db: newDb, auth: newAuth } = initFirebase(c);
       setApp(newApp);
       setDb(newDb);
+      setAuth(newAuth);
       setConfig(c);
       saveLastConfig(c);
+      try {
+        const uid = await signInAnon(newAuth);
+        setAuthUid(uid);
+      } catch (err) {
+        console.warn("Anonymous sign-in failed — enable Anonymous auth in Firebase Console if your rules require auth.", err);
+        setAuthUid(null);
+      }
       setStep(2);
     },
     [app],
@@ -59,6 +73,8 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
     if (app) await teardownFirebase(app);
     setApp(null);
     setDb(null);
+    setAuth(null);
+    setAuthUid(null);
     setConfig(null);
     setCollections([]);
     setSelectedCollection(null);
@@ -94,6 +110,8 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
       value={{
         app,
         db,
+        auth,
+        authUid,
         config,
         connected: !!app,
         collections,
