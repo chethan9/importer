@@ -39,6 +39,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { downloadImportReport, type ExportResultRow } from "@/lib/exportResults";
+import { writeBatchAdmin } from "@/services/adminFirestoreService";
 
 type Props = {
   file: ParsedFile;
@@ -56,7 +57,7 @@ const BATCH_SIZE = 400;
 type LiveResult = { rowIndex: number; docId: string; docPath: string };
 
 export function ImportStep({ file, collectionName, config, onBack, onReset, onOpenHistory }: Props) {
-  const { db, config: fbConfig } = useFirebase();
+  const { db, config: fbConfig, authMode, serviceAccount } = useFirebase();
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(0);
@@ -77,7 +78,8 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
   useEffect(() => () => { cancelRef.current = true; }, []);
 
   async function run() {
-    if (!db || !fbConfig) return;
+    if (authMode === "web-sdk" && (!db || !fbConfig)) return;
+    if (authMode === "service-account" && !serviceAccount) return;
     setPhase("running");
     setProgress(0);
     setSuccessCount(0);
@@ -90,8 +92,9 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
 
     let newImportId: string;
     try {
+      const projectIdForLog = fbConfig?.projectId ?? serviceAccount?.project_id ?? "unknown";
       newImportId = await createImportRecord({
-        projectId: fbConfig.projectId,
+        projectId: projectIdForLog,
         collectionName,
         mode: config.mode,
         totalRows: rowsToImport.length,
@@ -114,7 +117,22 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
       const lookups = collectRefQueryLookups(config.tree, rowsToImport);
       if (lookups.length > 0) {
         toast({ title: "Resolving references", description: `Looking up ${lookups.length} unique doc${lookups.length === 1 ? "" : "s"}…` });
-        refCache = await resolveRefQueries(lookups, db) as Map<string, unknown>;
+        if (authMode === "service-account" && serviceAccount) {
+          refCache = new Map();
+          for (const l of lookups) {
+            try {
+              const res = await fetch("/api/admin/resolve-ref", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ serviceAccount, collection: l.collection, field: l.field, value: l.value }),
+              });
+              const j = await res.json();
+              if (res.ok && j.path) refCache.set(l.key, j.path);
+            } catch { /* cache miss */ }
+          }
+        } else {
+          refCache = await resolveRefQueries(lookups, db!) as Map<string, unknown>;
+        }
       }
     } catch (err) {
       console.warn("Ref resolution failed:", err);
@@ -127,7 +145,9 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
     for (let batchStart = 0; batchStart < rowsToImport.length; batchStart += BATCH_SIZE) {
       if (cancelRef.current) break;
       const slice = rowsToImport.slice(batchStart, batchStart + BATCH_SIZE);
-      const result = await processBatch(db, collectionName, slice, batchStart, config, localErrors, refCache as never);
+      const result = authMode === "service-account" && serviceAccount
+        ? await processBatchAdmin(serviceAccount, collectionName, slice, batchStart, config, localErrors, refCache)
+        : await processBatch(db!, collectionName, slice, batchStart, config, localErrors, refCache as never);
       localSuccess += result.written.length;
       result.written.forEach((w) => {
         localResults.push({ rowIndex: w.rowIndex, docId: w.docId, docPath: `${collectionName}/${w.docId}` });
