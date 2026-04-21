@@ -31,25 +31,26 @@ export async function createImportRecord(input: {
   totalRows: number;
   mappings: ImportMapping[];
 }): Promise<string> {
+  const payload = {
+    project_id: input.projectId,
+    collection_name: input.collectionName,
+    mode: input.mode,
+    total_rows: input.totalRows,
+    mappings: input.mappings,
+    status: "running",
+  };
   const { data, error } = await supabase
     .from("imports")
-    .insert({
-      project_id: input.projectId,
-      collection_name: input.collectionName,
-      mode: input.mode,
-      total_rows: input.totalRows,
-      mappings: input.mappings as unknown as Record<string, unknown>,
-      status: "running",
-    })
+    .insert(payload as never)
     .select("id")
     .single();
   if (error) throw error;
-  return data.id as string;
+  return (data as { id: string }).id;
 }
 
 export async function logImportedDocs(rows: ImportedDocRecord[]): Promise<void> {
   if (!rows.length) return;
-  const { error } = await supabase.from("imported_docs").insert(rows);
+  const { error } = await supabase.from("imported_docs").insert(rows as never);
   if (error) throw error;
 }
 
@@ -57,15 +58,16 @@ export async function finalizeImport(
   importId: string,
   payload: { successCount: number; errorCount: number; errorLog: ImportErrorEntry[]; status: "completed" | "failed" },
 ) {
+  const update = {
+    status: payload.status,
+    success_count: payload.successCount,
+    error_count: payload.errorCount,
+    error_log: payload.errorLog,
+    completed_at: new Date().toISOString(),
+  };
   await supabase
     .from("imports")
-    .update({
-      status: payload.status,
-      success_count: payload.successCount,
-      error_count: payload.errorCount,
-      error_log: payload.errorLog as unknown as Record<string, unknown>,
-      completed_at: new Date().toISOString(),
-    })
+    .update(update as never)
     .eq("id", importId);
 }
 
@@ -91,10 +93,10 @@ export async function fetchImportedDocs(importId: string) {
 export async function markImportReverted(importId: string) {
   await supabase
     .from("imports")
-    .update({ status: "reverted", reverted_at: new Date().toISOString() })
+    .update({ status: "reverted", reverted_at: new Date().toISOString() } as never)
     .eq("id", importId);
 }
 
 export async function markImportReverting(importId: string) {
-  await supabase.from("imports").update({ status: "reverting" }).eq("id", importId);
+  await supabase.from("imports").update({ status: "reverting" } as never).eq("id", importId);
 }

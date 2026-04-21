@@ -53,7 +53,7 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
       activeMappings.forEach((m) => {
         const raw = row[m.sourceColumn!];
         const res = coerceValue(raw, m.firestoreType, { db: db ?? undefined, arrayElementType: m.arrayElementType });
-        if (!res.ok) {
+        if (res.ok === false) {
           errorCount++;
           if (errors.length < 5) errors.push({ row: i + 1, field: m.targetField, msg: res.error });
         }

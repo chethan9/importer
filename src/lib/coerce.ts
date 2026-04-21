@@ -123,7 +123,9 @@ export function coerceValue(
         const out: unknown[] = [];
         for (let i = 0; i < arr.length; i++) {
           const r = coerceValue(arr[i], elType as FirestoreType);
-          if (!r.ok) return { ok: false, error: `Array item ${i}: ${r.error}` };
+          if (r.ok === false) {
+            return { ok: false, error: "Array item " + i + ": " + r.error };
+          }
           out.push(r.value);
         }
         return { ok: true, value: out };

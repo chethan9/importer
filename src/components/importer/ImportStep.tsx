@@ -313,7 +313,7 @@ async function processBatch(
       if (!m.sourceColumn || !m.targetField.trim()) continue;
       const raw = row[m.sourceColumn];
       const res = coerceValue(raw, m.firestoreType, { db, arrayElementType: m.arrayElementType });
-      if (!res.ok) {
+      if (res.ok === false) {
         errors.push({ rowIndex, field: m.targetField, message: res.error });
         rowHasError = true;
         break;
