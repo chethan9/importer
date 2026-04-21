@@ -10,6 +10,14 @@ import {
   inferCollectionSchema,
   saveLastConfig,
 } from "@/lib/firebase";
+import {
+  saveServiceAccount,
+  loadServiceAccount,
+  clearServiceAccount,
+  listCollectionsAdmin,
+  inferSchemaAdmin,
+  type ServiceAccount,
+} from "@/services/adminFirestoreService";
 
 export type CollectionInfo = {
   name: string;
@@ -17,18 +25,24 @@ export type CollectionInfo = {
   fields: FieldSchema[];
 };
 
+export type AuthMode = "web" | "admin";
+
 type Ctx = {
+  authMode: AuthMode;
   app: FirebaseApp | null;
   db: Firestore | null;
   auth: Auth | null;
   authUid: string | null;
   config: FirebaseConfig | null;
+  serviceAccount: ServiceAccount | null;
+  projectId: string | null;
   connected: boolean;
   collections: CollectionInfo[];
   selectedCollection: string | null;
   step: number;
   setStep: (n: number) => void;
-  connect: (c: FirebaseConfig) => Promise<void>;
+  connectWeb: (c: FirebaseConfig) => Promise<void>;
+  connectAdmin: (sa: ServiceAccount) => Promise<void>;
   disconnect: () => Promise<void>;
   addCollection: (name: string) => Promise<void>;
   removeCollection: (name: string) => void;
@@ -38,35 +52,54 @@ type Ctx = {
 const FirebaseCtx = createContext<Ctx | null>(null);
 
 export function FirebaseProvider({ children }: { children: ReactNode }) {
+  const [authMode, setAuthMode] = useState<AuthMode>("web");
   const [app, setApp] = useState<FirebaseApp | null>(null);
   const [db, setDb] = useState<Firestore | null>(null);
   const [auth, setAuth] = useState<Auth | null>(null);
   const [authUid, setAuthUid] = useState<string | null>(null);
   const [config, setConfig] = useState<FirebaseConfig | null>(null);
+  const [serviceAccount, setServiceAccount] = useState<ServiceAccount | null>(null);
   const [collections, setCollections] = useState<CollectionInfo[]>([]);
   const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
   const [step, setStep] = useState<number>(1);
 
-  const connect = useCallback(
+  const connectWeb = useCallback(
     async (c: FirebaseConfig) => {
       if (app) await teardownFirebase(app);
       const { app: newApp, db: newDb } = initFirebase(c);
       const newAuth = getAuth(newApp);
+      setAuthMode("web");
       setApp(newApp);
       setDb(newDb);
       setAuth(newAuth);
       setConfig(c);
+      setServiceAccount(null);
       saveLastConfig(c);
       try {
         const cred = await signInAnonymously(newAuth);
         setAuthUid(cred.user.uid);
       } catch (err) {
-        console.warn(
-          "Anonymous sign-in failed. Enable Anonymous auth in Firebase Console → Authentication → Sign-in method if your Firestore rules require auth.",
-          err,
-        );
+        console.warn("Anonymous sign-in failed.", err);
         setAuthUid(null);
       }
+      setStep(2);
+    },
+    [app],
+  );
+
+  const connectAdmin = useCallback(
+    async (sa: ServiceAccount) => {
+      if (app) await teardownFirebase(app);
+      // Validate by listing collections (will throw if SA invalid)
+      await listCollectionsAdmin(sa);
+      setAuthMode("admin");
+      setApp(null);
+      setDb(null);
+      setAuth(null);
+      setAuthUid(null);
+      setConfig(null);
+      setServiceAccount(sa);
+      saveServiceAccount(sa);
       setStep(2);
     },
     [app],
@@ -79,6 +112,8 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
     setAuth(null);
     setAuthUid(null);
     setConfig(null);
+    setServiceAccount(null);
+    clearServiceAccount();
     setCollections([]);
     setSelectedCollection(null);
     setStep(1);
@@ -86,14 +121,21 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
 
   const addCollection = useCallback(
     async (name: string) => {
-      if (!db) throw new Error("Not connected to Firebase");
       const trimmed = name.trim();
       if (!trimmed) return;
       if (collections.find((c) => c.name === trimmed)) return;
-      const info = await inferCollectionSchema(db, trimmed);
+
+      let info: { docCount: number; fields: FieldSchema[] };
+      if (authMode === "admin") {
+        if (!serviceAccount) throw new Error("No service account");
+        info = await inferSchemaAdmin(serviceAccount, trimmed);
+      } else {
+        if (!db) throw new Error("Not connected to Firebase");
+        info = await inferCollectionSchema(db, trimmed);
+      }
       setCollections((prev) => [...prev, { name: trimmed, ...info }]);
     },
-    [db, collections],
+    [authMode, db, serviceAccount, collections],
   );
 
   const removeCollection = useCallback(
@@ -108,20 +150,27 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
     setSelectedCollection(name);
   }, []);
 
+  const projectId = config?.projectId ?? serviceAccount?.project_id ?? null;
+  const connected = authMode === "admin" ? !!serviceAccount : !!app;
+
   return (
     <FirebaseCtx.Provider
       value={{
+        authMode,
         app,
         db,
         auth,
         authUid,
         config,
-        connected: !!app,
+        serviceAccount,
+        projectId,
+        connected,
         collections,
         selectedCollection,
         step,
         setStep,
-        connect,
+        connectWeb,
+        connectAdmin,
         disconnect,
         addCollection,
         removeCollection,
@@ -138,3 +187,5 @@ export function useFirebase() {
   if (!ctx) throw new Error("useFirebase must be used inside FirebaseProvider");
   return ctx;
 }
+
+export { loadServiceAccount };

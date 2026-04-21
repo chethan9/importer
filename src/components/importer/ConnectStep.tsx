@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { FirebaseError } from "firebase/app";
-import { Loader2, Link2, History, AlertCircle, KeyRound } from "lucide-react";
+import { Loader2, Link2, History, AlertCircle, KeyRound, Shield, Globe } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,8 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { useFirebase } from "@/contexts/FirebaseContext";
+import { useFirebase, loadServiceAccount } from "@/contexts/FirebaseContext";
 import { FirebaseConfig, loadLastConfig, validateConfig } from "@/lib/firebase";
+import type { ServiceAccount } from "@/services/adminFirestoreService";
 
 const FIELDS: { key: keyof FirebaseConfig; label: string; required?: boolean; placeholder?: string }[] = [
   { key: "apiKey", label: "apiKey", required: true, placeholder: "AIzaSy…" },
@@ -31,70 +32,89 @@ const EMPTY: FirebaseConfig = {
 };
 
 export function ConnectStep() {
-  const { connect } = useFirebase();
+  const { connectWeb, connectAdmin } = useFirebase();
   const { toast } = useToast();
   const [fields, setFields] = useState<FirebaseConfig>(EMPTY);
   const [json, setJson] = useState("");
+  const [saJson, setSaJson] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [hasLast, setHasLast] = useState(false);
+  const [hasLastSa, setHasLastSa] = useState(false);
 
   useEffect(() => {
     setHasLast(!!loadLastConfig());
+    setHasLastSa(!!loadServiceAccount());
   }, []);
 
-  const loadLast = () => {
+  const loadLastWeb = () => {
     const c = loadLastConfig();
     if (!c) return;
     setFields({ ...EMPTY, ...c });
     setJson(JSON.stringify(c, null, 2));
-    toast({ title: "Loaded last-used config", description: c.projectId });
+    toast({ title: "Loaded last web config", description: c.projectId });
   };
 
-  const tryParseJson = (): FirebaseConfig | null => {
+  const loadLastSa = () => {
+    const sa = loadServiceAccount();
+    if (!sa) return;
+    setSaJson(JSON.stringify(sa, null, 2));
+    toast({ title: "Loaded last service account", description: sa.project_id });
+  };
+
+  const tryParseJson = (raw: string): Record<string, unknown> | null => {
     try {
-      const raw = json.trim();
-      if (!raw) return null;
-      const cleaned = raw
+      const s = raw.trim();
+      if (!s) return null;
+      const cleaned = s
         .replace(/^\s*(const|let|var)\s+\w+\s*=\s*/m, "")
         .replace(/;\s*$/, "")
         .replace(/^\s*export\s+default\s+/m, "");
       const parsed = JSON.parse(
         cleaned.startsWith("{") ? cleaned.replace(/([{,]\s*)([a-zA-Z_]\w*)\s*:/g, '$1"$2":').replace(/'/g, '"') : cleaned,
       );
-      return parsed as FirebaseConfig;
+      return parsed as Record<string, unknown>;
     } catch {
       return null;
     }
   };
 
-  const handleConnect = async (source: "fields" | "json") => {
+  const handleConnectWeb = async (source: "fields" | "json") => {
     setError(null);
     let cfg: FirebaseConfig | null = null;
     if (source === "json") {
-      cfg = tryParseJson();
-      if (!cfg) {
-        setError("Could not parse JSON. Paste a valid firebaseConfig object.");
-        return;
-      }
+      cfg = tryParseJson(json) as FirebaseConfig | null;
+      if (!cfg) { setError("Could not parse JSON. Paste a valid firebaseConfig object."); return; }
     } else {
       cfg = fields;
     }
     const v = validateConfig(cfg);
-    if (v) {
-      setError(v);
-      return;
-    }
+    if (v) { setError(v); return; }
     setLoading(true);
     try {
-      await connect(cfg);
-      toast({
-        title: "Connected",
-        description: `Firebase initialized for ${cfg.projectId}`,
-      });
+      await connectWeb(cfg);
+      toast({ title: "Connected", description: `Firebase Web SDK · ${cfg.projectId}` });
     } catch (e) {
       const msg = e instanceof FirebaseError ? e.message : (e as Error).message;
       setError(msg || "Failed to initialize Firebase");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConnectAdmin = async () => {
+    setError(null);
+    const parsed = tryParseJson(saJson);
+    if (!parsed) { setError("Could not parse service account JSON."); return; }
+    const required = ["project_id", "private_key", "client_email"];
+    const missing = required.filter((k) => !parsed[k]);
+    if (missing.length) { setError(`Service account missing: ${missing.join(", ")}`); return; }
+    setLoading(true);
+    try {
+      await connectAdmin(parsed as unknown as ServiceAccount);
+      toast({ title: "Connected", description: `Service account · ${parsed.project_id}` });
+    } catch (e) {
+      setError((e as Error).message || "Failed to validate service account");
     } finally {
       setLoading(false);
     }
@@ -111,93 +131,114 @@ export function ConnectStep() {
             <CardTitle className="text-xl">Connect to Firebase</CardTitle>
           </div>
           <CardDescription>
-            Your credentials stay in the browser. Nothing is sent to our servers — Firestore writes
-            run client-side via the Firebase Web SDK.
+            Use a <strong>service account</strong> to bypass Firestore rules (recommended), or the Web SDK config
+            if your rules already allow authenticated writes.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Tabs defaultValue="json" className="w-full">
-            <div className="flex items-center justify-between gap-3">
-              <TabsList>
-                <TabsTrigger value="json">Paste config</TabsTrigger>
-                <TabsTrigger value="fields">Individual fields</TabsTrigger>
-              </TabsList>
-              {hasLast && (
-                <Button size="sm" variant="ghost" onClick={loadLast} className="gap-1.5">
-                  <History className="h-3.5 w-3.5" />
-                  Load last used
-                </Button>
-              )}
-            </div>
+          <Tabs defaultValue="admin" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="admin" className="gap-1.5"><Shield className="h-3.5 w-3.5" /> Service account</TabsTrigger>
+              <TabsTrigger value="web" className="gap-1.5"><Globe className="h-3.5 w-3.5" /> Web SDK config</TabsTrigger>
+            </TabsList>
 
-            <TabsContent value="json" className="mt-4 space-y-3">
-              <Label htmlFor="json" className="text-xs font-medium text-muted-foreground">
-                firebaseConfig object
-              </Label>
+            <TabsContent value="admin" className="mt-4 space-y-3">
+              <Alert className="border-accent/40 bg-accent/5">
+                <Shield className="h-4 w-4 text-accent" />
+                <AlertDescription className="text-xs text-foreground">
+                  <strong>Recommended.</strong> Bypasses Firestore security rules. Generate one in Firebase Console → Project settings → Service accounts → <em>Generate new private key</em>. JSON stays in your browser.
+                </AlertDescription>
+              </Alert>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="sa" className="text-xs font-medium text-muted-foreground">Service account JSON</Label>
+                {hasLastSa && (
+                  <Button size="sm" variant="ghost" onClick={loadLastSa} className="gap-1.5 h-7">
+                    <History className="h-3.5 w-3.5" /> Load last used
+                  </Button>
+                )}
+              </div>
               <Textarea
-                id="json"
-                value={json}
-                onChange={(e) => setJson(e.target.value)}
+                id="sa"
+                value={saJson}
+                onChange={(e) => setSaJson(e.target.value)}
                 placeholder={`{
-  "apiKey": "AIzaSy...",
-  "authDomain": "my-app.firebaseapp.com",
-  "projectId": "my-app",
-  "storageBucket": "my-app.appspot.com",
-  "messagingSenderId": "1234567890",
-  "appId": "1:1234:web:abcd"
+  "type": "service_account",
+  "project_id": "my-app",
+  "private_key_id": "...",
+  "private_key": "-----BEGIN PRIVATE KEY-----\\n...",
+  "client_email": "firebase-adminsdk-xxx@my-app.iam.gserviceaccount.com",
+  ...
 }`}
                 rows={10}
                 className="font-mono text-xs"
               />
-              <Button
-                onClick={() => void handleConnect("json")}
-                disabled={loading}
-                className="w-full gap-2"
-                size="lg"
-              >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Link2 className="h-4 w-4" />
-                )}
-                Connect
+              <Button onClick={handleConnectAdmin} disabled={loading} className="w-full gap-2" size="lg">
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
+                Connect with service account
               </Button>
             </TabsContent>
 
-            <TabsContent value="fields" className="mt-4 space-y-3">
-              <div className="grid gap-3 sm:grid-cols-2">
-                {FIELDS.map((f) => (
-                  <div key={f.key} className={f.key === "apiKey" ? "sm:col-span-2" : ""}>
-                    <Label
-                      htmlFor={f.key}
-                      className="mb-1.5 block font-mono text-xs text-muted-foreground"
-                    >
-                      {f.label}
-                      {f.required && <span className="ml-1 text-destructive">*</span>}
-                    </Label>
-                    <Input
-                      id={f.key}
-                      value={fields[f.key] ?? ""}
-                      onChange={(e) => setFields({ ...fields, [f.key]: e.target.value })}
-                      placeholder={f.placeholder}
-                      className="font-mono text-sm"
-                    />
+            <TabsContent value="web" className="mt-4 space-y-3">
+              <Alert className="border-border bg-muted/40">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  Requires Firestore rules that allow authenticated writes. The app signs in anonymously on connect.
+                </AlertDescription>
+              </Alert>
+              <Tabs defaultValue="json">
+                <div className="flex items-center justify-between gap-3">
+                  <TabsList>
+                    <TabsTrigger value="json">Paste config</TabsTrigger>
+                    <TabsTrigger value="fields">Individual fields</TabsTrigger>
+                  </TabsList>
+                  {hasLast && (
+                    <Button size="sm" variant="ghost" onClick={loadLastWeb} className="gap-1.5">
+                      <History className="h-3.5 w-3.5" /> Load last used
+                    </Button>
+                  )}
+                </div>
+
+                <TabsContent value="json" className="mt-4 space-y-3">
+                  <Textarea
+                    value={json}
+                    onChange={(e) => setJson(e.target.value)}
+                    placeholder={`{
+  "apiKey": "AIzaSy...",
+  "projectId": "my-app",
+  ...
+}`}
+                    rows={8}
+                    className="font-mono text-xs"
+                  />
+                  <Button onClick={() => void handleConnectWeb("json")} disabled={loading} className="w-full gap-2" size="lg">
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+                    Connect
+                  </Button>
+                </TabsContent>
+
+                <TabsContent value="fields" className="mt-4 space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {FIELDS.map((f) => (
+                      <div key={f.key} className={f.key === "apiKey" ? "sm:col-span-2" : ""}>
+                        <Label htmlFor={f.key} className="mb-1.5 block font-mono text-xs text-muted-foreground">
+                          {f.label}{f.required && <span className="ml-1 text-destructive">*</span>}
+                        </Label>
+                        <Input
+                          id={f.key}
+                          value={fields[f.key] ?? ""}
+                          onChange={(e) => setFields({ ...fields, [f.key]: e.target.value })}
+                          placeholder={f.placeholder}
+                          className="font-mono text-sm"
+                        />
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              <Button
-                onClick={() => void handleConnect("fields")}
-                disabled={loading}
-                className="w-full gap-2"
-                size="lg"
-              >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Link2 className="h-4 w-4" />
-                )}
-                Connect
-              </Button>
+                  <Button onClick={() => void handleConnectWeb("fields")} disabled={loading} className="w-full gap-2" size="lg">
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+                    Connect
+                  </Button>
+                </TabsContent>
+              </Tabs>
             </TabsContent>
           </Tabs>
 
@@ -209,11 +250,6 @@ export function ConnectStep() {
           )}
         </CardContent>
       </Card>
-
-      <p className="mt-6 text-center text-xs text-muted-foreground">
-        Find your config in the Firebase Console → Project settings → Your apps → SDK setup and
-        configuration.
-      </p>
     </div>
   );
 }
