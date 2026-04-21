@@ -1,6 +1,6 @@
 ---
 title: Design system + Firebase connect & collection browser
-status: in_progress
+status: done
 priority: urgent
 type: feature
 tags: [design-system, firebase, ui]
@@ -19,13 +19,13 @@ Collection discovery: Firestore Web SDK cannot list collections natively — pro
 Install `firebase` via npm during this task.
 
 ## Checklist
-- [ ] Install `firebase` package; set up design system: import Sora + Work Sans + JetBrains Mono from Google Fonts, register in tailwind config, map HSL tokens from project brief into globals.css (coral-red primary, teal accent, warm off-white background, 8px radius)
-- [ ] App shell on the main landing view: header with product name "Firebase Data Importer" + tagline, stepper showing 4 steps (Connect → Browse → Map → Import) with current step highlighted
-- [ ] Step 1 — Connect screen: form with two input modes (paste full config JSON, or fill 6 individual fields: apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId), validate required fields, "Connect" primary button, inline error if init fails, success toast on connect, remember last config in localStorage with a "Load last used" button
-- [ ] Step 2 — Collection browser: input to add collection names (one at a time or comma-separated), list added collections as selectable cards showing collection name + inferred doc count (first fetch) + sample field chips (mono font), clicking a card selects it and advances to Step 3
-- [ ] Per-collection schema preview panel: shows inferred field names with detected types (string, number, boolean, timestamp, array, map) in a clean table, note that schema is inferred from the first 20 docs
-- [ ] Empty/error states: no collections added yet (friendly prompt), Firebase init error (clear message with fix hint), permission denied reading a collection (show which collection and suggest checking Firestore rules)
-- [ ] Disconnect / switch project button in the header that clears in-memory Firebase app and returns to Step 1
+- [x] Install `firebase` package; set up design system: import Sora + Work Sans + JetBrains Mono from Google Fonts, register in tailwind config, map HSL tokens from project brief into globals.css (coral-red primary, teal accent, warm off-white background, 8px radius)
+- [x] App shell on the main landing view: header with product name "Firebase Data Importer" + tagline, stepper showing 4 steps (Connect → Browse → Map → Import) with current step highlighted
+- [x] Step 1 — Connect screen: form with two input modes (paste full config JSON, or fill 6 individual fields: apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId), validate required fields, "Connect" primary button, inline error if init fails, success toast on connect, remember last config in localStorage with a "Load last used" button
+- [x] Step 2 — Collection browser: input to add collection names (one at a time or comma-separated), list added collections as selectable cards showing collection name + inferred doc count (first fetch) + sample field chips (mono font), clicking a card selects it and advances to Step 3
+- [x] Per-collection schema preview panel: shows inferred field names with detected types (string, number, boolean, timestamp, array, map) in a clean table, note that schema is inferred from the first 20 docs
+- [x] Empty/error states: no collections added yet (friendly prompt), Firebase init error (clear message with fix hint), permission denied reading a collection (show which collection and suggest checking Firestore rules)
+- [x] Disconnect / switch project button in the header that clears in-memory Firebase app and returns to Step 1
 
 ## Acceptance
 - User can paste a Firebase config, click Connect, and see a success state.
