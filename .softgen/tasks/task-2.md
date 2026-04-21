@@ -1,9 +1,9 @@
 ---
 title: File upload, field mapping & import runner with transaction logging
-status: todo
+status: done
 priority: high
 type: feature
-tags: [firebase, csv, xlsx, import, supabase, validation]
+tags: [firebase, import, csv, xlsx, supabase]
 created_by: agent
 created_at: 2026-04-21
 position: 2

@@ -313,7 +313,7 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
 
 function buildInitialMappings(file: ParsedFile, collection: CollectionInfo): ImportMapping[] {
   const existingFields = new Map<string, FirestoreType>();
-  collection.schema?.forEach((f) => existingFields.set(f.name, f.type as FirestoreType));
+  collection.fields?.forEach((f) => existingFields.set(f.name, f.type as FirestoreType));
   return file.columns.map((col) => {
     const existing = existingFields.get(col);
     const sampleValue = file.rows[0]?.[col];

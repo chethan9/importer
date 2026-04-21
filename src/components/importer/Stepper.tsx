@@ -1,53 +1,46 @@
-import { Check, Link2, Database, ArrowRightLeft, Upload } from "lucide-react";
+import { Check, Link2, Database, ArrowRightLeft, Upload, PlayCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const STEPS = [
+type StepDef = { id: number; label: string; icon: typeof Check };
+
+const STEPS: StepDef[] = [
   { id: 1, label: "Connect", icon: Link2 },
   { id: 2, label: "Browse", icon: Database },
-  { id: 3, label: "Map", icon: ArrowRightLeft },
-  { id: 4, label: "Import", icon: Upload },
+  { id: 3, label: "Upload", icon: Upload },
+  { id: 4, label: "Map", icon: ArrowRightLeft },
+  { id: 5, label: "Import", icon: PlayCircle },
 ];
 
-export function Stepper({ current }: { current: number }) {
+type Props = {
+  current: number;
+  connected: boolean;
+};
+
+export function Stepper({ current, connected }: Props) {
   return (
-    <ol className="mx-auto flex max-w-3xl items-center gap-2 px-6 py-6">
+    <ol className="flex items-center gap-1 overflow-x-auto py-1">
       {STEPS.map((s, idx) => {
-        const Icon = s.icon;
-        const done = current > s.id;
-        const active = current === s.id;
+        const isDone = current > s.id || (s.id === 1 && connected && current > 1);
+        const isActive = current === s.id;
+        const Icon = isDone ? Check : s.icon;
         return (
-          <li key={s.id} className="flex flex-1 items-center gap-2">
-            <div className="flex items-center gap-2.5">
-              <div
-                className={cn(
-                  "flex h-9 w-9 items-center justify-center rounded-full ring-1 transition-all",
-                  done && "bg-accent text-accent-foreground ring-accent",
-                  active &&
-                    "bg-primary text-primary-foreground ring-primary shadow-sm shadow-primary/30",
-                  !done && !active && "bg-muted text-muted-foreground ring-border",
-                )}
-              >
-                {done ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
-              </div>
-              <div className="flex flex-col leading-tight">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-                  Step {s.id}
-                </span>
-                <span
-                  className={cn(
-                    "text-sm font-medium",
-                    (active || done) ? "text-foreground" : "text-muted-foreground",
-                  )}
-                >
-                  {s.label}
-                </span>
-              </div>
+          <li key={s.id} className="flex items-center gap-1">
+            <div
+              className={cn(
+                "flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                isActive && "border-primary bg-primary text-primary-foreground shadow-sm",
+                isDone && !isActive && "border-accent/40 bg-accent/10 text-accent",
+                !isActive && !isDone && "border-border/70 bg-card text-muted-foreground",
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              <span className="whitespace-nowrap">{s.label}</span>
             </div>
             {idx < STEPS.length - 1 && (
               <div
                 className={cn(
-                  "mx-1 h-px flex-1 transition-colors",
-                  done ? "bg-accent" : "bg-border",
+                  "h-px w-6 transition-colors",
+                  current > s.id ? "bg-accent/60" : "bg-border",
                 )}
               />
             )}

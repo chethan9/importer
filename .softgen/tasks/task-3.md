@@ -1,6 +1,6 @@
 ---
 title: Import history & revert
-status: todo
+status: done
 priority: high
 type: feature
 tags: [firebase, supabase, revert, history]
