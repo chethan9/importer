@@ -78,8 +78,8 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
   useEffect(() => () => { cancelRef.current = true; }, []);
 
   async function run() {
-    if (authMode === "web-sdk" && (!db || !fbConfig)) return;
-    if (authMode === "service-account" && !serviceAccount) return;
+    if (authMode === "web" && (!db || !fbConfig)) return;
+    if (authMode === "admin" && !serviceAccount) return;
     setPhase("running");
     setProgress(0);
     setSuccessCount(0);
@@ -117,14 +117,14 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
       const lookups = collectRefQueryLookups(config.tree, rowsToImport);
       if (lookups.length > 0) {
         toast({ title: "Resolving references", description: `Looking up ${lookups.length} unique doc${lookups.length === 1 ? "" : "s"}…` });
-        if (authMode === "service-account" && serviceAccount) {
+        if (authMode === "admin" && serviceAccount) {
           refCache = new Map();
           for (const l of lookups) {
             try {
               const res = await fetch("/api/admin/resolve-ref", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ serviceAccount, collection: l.collection, field: l.field, value: l.value }),
+                body: JSON.stringify({ serviceAccount, collection: l.collection, field: l.matchField, value: l.value }),
               });
               const j = await res.json();
               if (res.ok && j.path) refCache.set(l.key, j.path);
@@ -145,7 +145,7 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
     for (let batchStart = 0; batchStart < rowsToImport.length; batchStart += BATCH_SIZE) {
       if (cancelRef.current) break;
       const slice = rowsToImport.slice(batchStart, batchStart + BATCH_SIZE);
-      const result = authMode === "service-account" && serviceAccount
+      const result = authMode === "admin" && serviceAccount
         ? await processBatchAdmin(serviceAccount, collectionName, slice, batchStart, config, localErrors, refCache)
         : await processBatch(db!, collectionName, slice, batchStart, config, localErrors, refCache as never);
       localSuccess += result.written.length;
@@ -509,4 +509,88 @@ async function processBatch(
   }
 
   return { written };
+}
+
+async function processBatchAdmin(
+  sa: import("@/services/adminFirestoreService").ServiceAccount,
+  collectionName: string,
+  rows: Record<string, unknown>[],
+  offset: number,
+  config: MappingConfig,
+  errors: ImportErrorEntry[],
+  refCache: Map<string, unknown> | undefined,
+): Promise<{ written: WrittenDoc[] }> {
+  const ops: Array<{ docId?: string; data: Record<string, unknown>; merge: boolean; rowIndex: number }> = [];
+  const perOpMeta: Array<{ rowIndex: number; hasId: boolean }> = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowIndex = offset + i;
+    const data: Record<string, unknown> = {};
+    const rowErrs: { field: string; message: string }[] = [];
+
+    // Build plain data object (no DocumentReference — serialize refs as __ref__ path strings for admin API)
+    const walk = (nodes: typeof config.tree, target: Record<string, unknown>) => {
+      for (const node of nodes) {
+        const name = node.name.trim();
+        if (!name) continue;
+        if (node.kind === "map") {
+          const child: Record<string, unknown> = {};
+          walk(node.children, child);
+          if (Object.keys(child).length > 0) target[name] = child;
+          continue;
+        }
+        if (node.source.kind === "skip") continue;
+        if (node.source.kind === "now") { target[name] = { __type: "serverTimestamp" }; continue; }
+        if (node.source.kind === "refQuery") {
+          const src = node.source;
+          const rawVal = src.matchSource.kind === "column" ? row[src.matchSource.column] : src.matchSource.value;
+          const value = rawVal === null || rawVal === undefined ? "" : String(rawVal).trim();
+          if (!value) { if (src.onMissing === "error") rowErrs.push({ field: name, message: "Empty match value" }); continue; }
+          const path = refCache?.get(`${src.collection}\u0000${src.matchField}\u0000${value}`) as string | undefined;
+          if (!path) { if (src.onMissing === "error") rowErrs.push({ field: name, message: `No doc in "${src.collection}" where ${src.matchField} == "${value}"` }); continue; }
+          target[name] = { __type: "ref", path };
+          continue;
+        }
+        if (node.source.kind === "column") target[name] = row[node.source.column];
+        else if (node.source.kind === "fixed") target[name] = node.source.value;
+        else if (node.source.kind === "autoIncrement") target[name] = node.source.start + rowIndex * node.source.step;
+      }
+    };
+    walk(config.tree, data);
+
+    if (rowErrs.length > 0) { rowErrs.forEach((e) => errors.push({ rowIndex, field: e.field, message: e.message })); continue; }
+
+    let docId: string | undefined;
+    if (config.docIdStrategy.kind === "column") {
+      const raw = row[config.docIdStrategy.column];
+      const idStr = raw === null || raw === undefined ? "" : String(raw).trim();
+      if (!idStr) { errors.push({ rowIndex, message: `Missing doc ID in column "${config.docIdStrategy.column}"` }); continue; }
+      docId = idStr;
+    }
+
+    ops.push({ docId, data, merge: config.mode === "merge", rowIndex });
+    perOpMeta.push({ rowIndex, hasId: !!docId });
+  }
+
+  if (ops.length === 0) return { written: [] };
+
+  try {
+    const res = await fetch("/api/admin/write-batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serviceAccount: sa, collection: collectionName, ops, checkExisting: config.docIdStrategy.kind === "column" }),
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || "write-batch failed");
+    const written: WrittenDoc[] = (j.results as Array<{ docId: string; action: "created" | "updated"; preSnapshot: Record<string, unknown> | null; rowIndex: number; error?: string }>).flatMap((r) => {
+      if (r.error) { errors.push({ rowIndex: r.rowIndex, message: r.error }); return []; }
+      return [{ docId: r.docId, action: r.action, preSnapshot: r.preSnapshot, rowIndex: r.rowIndex }];
+    });
+    return { written };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Admin batch failed";
+    ops.forEach((o) => errors.push({ rowIndex: o.rowIndex, message: `Admin API: ${msg}` }));
+    return { written: [] };
+  }
 }
