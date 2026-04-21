@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useState, ReactNode } from "react";
 import type { FirebaseApp } from "firebase/app";
-import type { Auth } from "firebase/auth";
+import { getAuth, signInAnonymously, type Auth } from "firebase/auth";
 import type { Firestore } from "firebase/firestore";
 import {
   FirebaseConfig,
@@ -9,7 +9,6 @@ import {
   teardownFirebase,
   inferCollectionSchema,
   saveLastConfig,
-  signInAnon,
 } from "@/lib/firebase";
 
 export type CollectionInfo = {
@@ -51,17 +50,21 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
   const connect = useCallback(
     async (c: FirebaseConfig) => {
       if (app) await teardownFirebase(app);
-      const { app: newApp, db: newDb, auth: newAuth } = initFirebase(c);
+      const { app: newApp, db: newDb } = initFirebase(c);
+      const newAuth = getAuth(newApp);
       setApp(newApp);
       setDb(newDb);
       setAuth(newAuth);
       setConfig(c);
       saveLastConfig(c);
       try {
-        const uid = await signInAnon(newAuth);
-        setAuthUid(uid);
+        const cred = await signInAnonymously(newAuth);
+        setAuthUid(cred.user.uid);
       } catch (err) {
-        console.warn("Anonymous sign-in failed — enable Anonymous auth in Firebase Console if your rules require auth.", err);
+        console.warn(
+          "Anonymous sign-in failed. Enable Anonymous auth in Firebase Console → Authentication → Sign-in method if your Firestore rules require auth.",
+          err,
+        );
         setAuthUid(null);
       }
       setStep(2);
