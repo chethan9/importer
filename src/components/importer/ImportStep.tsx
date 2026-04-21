@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   RotateCcw,
   History,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,8 +26,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useFirebase } from "@/contexts/FirebaseContext";
 import type { ParsedFile } from "./UploadStep";
 import type { MappingConfig } from "./MappingStep";
-import { coerceValue } from "@/lib/coerce";
-import { buildRowData } from "@/lib/mappingTree";
+import { buildRowData, collectRefQueryLookups, resolveRefQueries } from "@/lib/mappingTree";
 import {
   createImportRecord,
   logImportedDocs,
@@ -35,6 +35,10 @@ import {
   type ImportedDocRecord,
 } from "@/services/importService";
 import { useToast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { downloadImportReport, type ExportResultRow } from "@/lib/exportResults";
 
 type Props = {
   file: ParsedFile;
@@ -49,6 +53,8 @@ type Phase = "idle" | "running" | "done" | "failed";
 
 const BATCH_SIZE = 400;
 
+type LiveResult = { rowIndex: number; docId: string; docPath: string };
+
 export function ImportStep({ file, collectionName, config, onBack, onReset, onOpenHistory }: Props) {
   const { db, config: fbConfig } = useFirebase();
   const { toast } = useToast();
@@ -57,8 +63,16 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
   const [successCount, setSuccessCount] = useState(0);
   const [errorCount, setErrorCount] = useState(0);
   const [errors, setErrors] = useState<ImportErrorEntry[]>([]);
+  const [successResults, setSuccessResults] = useState<LiveResult[]>([]);
   const [importId, setImportId] = useState<string | null>(null);
+  const [startedAt, setStartedAt] = useState<Date | null>(null);
+  const [limitEnabled, setLimitEnabled] = useState(false);
+  const [rowLimit, setRowLimit] = useState<number>(Math.min(10, file.rows.length));
   const cancelRef = useRef(false);
+
+  const rowsToImport = limitEnabled
+    ? file.rows.slice(0, Math.max(1, Math.min(rowLimit, file.rows.length)))
+    : file.rows;
 
   useEffect(() => () => { cancelRef.current = true; }, []);
 
@@ -69,7 +83,10 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
     setSuccessCount(0);
     setErrorCount(0);
     setErrors([]);
+    setSuccessResults([]);
     cancelRef.current = false;
+    const now = new Date();
+    setStartedAt(now);
 
     let newImportId: string;
     try {
@@ -77,7 +94,7 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
         projectId: fbConfig.projectId,
         collectionName,
         mode: config.mode,
-        totalRows: file.rows.length,
+        totalRows: rowsToImport.length,
         mappings: config.tree,
       });
       setImportId(newImportId);
@@ -91,18 +108,35 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
       return;
     }
 
+    // Pre-resolve all reference queries in parallel
+    let refCache: Map<string, unknown> | undefined;
+    try {
+      const lookups = collectRefQueryLookups(config.tree, rowsToImport);
+      if (lookups.length > 0) {
+        toast({ title: "Resolving references", description: `Looking up ${lookups.length} unique doc${lookups.length === 1 ? "" : "s"}…` });
+        refCache = await resolveRefQueries(lookups, db) as Map<string, unknown>;
+      }
+    } catch (err) {
+      console.warn("Ref resolution failed:", err);
+    }
+
     const localErrors: ImportErrorEntry[] = [];
     let localSuccess = 0;
+    const localResults: LiveResult[] = [];
 
-    for (let batchStart = 0; batchStart < file.rows.length; batchStart += BATCH_SIZE) {
+    for (let batchStart = 0; batchStart < rowsToImport.length; batchStart += BATCH_SIZE) {
       if (cancelRef.current) break;
-      const slice = file.rows.slice(batchStart, batchStart + BATCH_SIZE);
-      const result = await processBatch(db, collectionName, slice, batchStart, config, localErrors);
+      const slice = rowsToImport.slice(batchStart, batchStart + BATCH_SIZE);
+      const result = await processBatch(db, collectionName, slice, batchStart, config, localErrors, refCache as never);
       localSuccess += result.written.length;
+      result.written.forEach((w) => {
+        localResults.push({ rowIndex: w.rowIndex, docId: w.docId, docPath: `${collectionName}/${w.docId}` });
+      });
       setSuccessCount(localSuccess);
       setErrorCount(localErrors.length);
       setErrors([...localErrors]);
-      setProgress(Math.min(100, Math.round(((batchStart + slice.length) / file.rows.length) * 100)));
+      setSuccessResults([...localResults]);
+      setProgress(Math.min(100, Math.round(((batchStart + slice.length) / rowsToImport.length) * 100)));
 
       if (result.written.length) {
         try {
@@ -150,15 +184,96 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
     URL.revokeObjectURL(url);
   }
 
+  function downloadReport() {
+    const results: ExportResultRow[] = [];
+    successResults.forEach((r) => {
+      results.push({
+        rowIndex: r.rowIndex,
+        status: "success",
+        docId: r.docId,
+        docPath: r.docPath,
+        errorMessage: "",
+        sourceRow: rowsToImport[r.rowIndex - 0] ?? rowsToImport[r.rowIndex],
+      });
+    });
+    errors.forEach((e) => {
+      results.push({
+        rowIndex: e.rowIndex,
+        status: "error",
+        docId: "",
+        docPath: "",
+        errorMessage: `${e.field ? e.field + ": " : ""}${e.message}`,
+        sourceRow: rowsToImport[e.rowIndex],
+      });
+    });
+    results.sort((a, b) => a.rowIndex - b.rowIndex);
+    downloadImportReport({
+      collection: collectionName,
+      mode: config.mode,
+      startedAt: startedAt ?? new Date(),
+      totalRows: rowsToImport.length,
+      successCount,
+      errorCount,
+      results,
+      includeSourceColumns: true,
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="font-heading text-2xl font-semibold">Run import</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Writing <span className="font-medium text-foreground">{file.rows.length}</span> rows to{" "}
+          Writing <span className="font-medium text-foreground">{rowsToImport.length}</span>
+          {limitEnabled && <span> of {file.rows.length}</span>} rows to{" "}
           <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{collectionName}</code> in batches of {BATCH_SIZE}.
         </p>
       </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Test run / row limit</CardTitle>
+          <CardDescription>Import only the first N rows — useful for dry-runs before a bulk import</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Switch id="limit-toggle" checked={limitEnabled} onCheckedChange={setLimitEnabled} disabled={phase === "running"} />
+              <Label htmlFor="limit-toggle" className="cursor-pointer text-sm">Limit rows</Label>
+            </div>
+            <div className={`flex items-center gap-2 ${limitEnabled ? "" : "opacity-40"}`}>
+              <Label htmlFor="limit-input" className="text-xs text-muted-foreground">Import first</Label>
+              <Input
+                id="limit-input"
+                type="number"
+                min={1}
+                max={file.rows.length}
+                value={rowLimit}
+                onChange={(e) => setRowLimit(Math.max(1, Math.min(file.rows.length, Number(e.target.value) || 1)))}
+                className="h-8 w-24 font-mono text-xs"
+                disabled={!limitEnabled || phase === "running"}
+              />
+              <span className="text-xs text-muted-foreground">of {file.rows.length} rows</span>
+            </div>
+            {limitEnabled && (
+              <div className="flex gap-1">
+                {[5, 10, 50, 100].filter((n) => n <= file.rows.length).map((n) => (
+                  <Button
+                    key={n}
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-[11px]"
+                    onClick={() => setRowLimit(n)}
+                    disabled={phase === "running"}
+                  >
+                    {n}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -181,7 +296,7 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-md border bg-card p-3">
               <div className="text-xs text-muted-foreground">Total</div>
-              <div className="font-heading text-2xl font-semibold">{file.rows.length}</div>
+              <div className="font-heading text-2xl font-semibold">{rowsToImport.length}</div>
             </div>
             <div className="rounded-md border bg-accent/5 p-3">
               <div className="text-xs text-muted-foreground">Succeeded</div>
@@ -219,6 +334,12 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
                 Import finished with errors. {successCount} succeeded, {errorCount} failed.
               </AlertDescription>
             </Alert>
+          )}
+
+          {(phase === "done" || phase === "failed") && (successCount > 0 || errorCount > 0) && (
+            <Button variant="outline" onClick={downloadReport} className="w-full">
+              <FileSpreadsheet className="mr-2 h-4 w-4" /> Download report (.xlsx)
+            </Button>
           )}
         </CardContent>
       </Card>
@@ -299,6 +420,7 @@ async function processBatch(
   offset: number,
   config: MappingConfig,
   errors: ImportErrorEntry[],
+  refCache: Parameters<typeof buildRowData>[4],
 ): Promise<{ written: WrittenDoc[] }> {
   const colRef = fsCollection(db, collectionName);
   const batch = writeBatch(db);
@@ -307,7 +429,7 @@ async function processBatch(
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const rowIndex = offset + i;
-    const { data, errors: rowErrors } = buildRowData(config.tree, row, rowIndex, db);
+    const { data, errors: rowErrors } = buildRowData(config.tree, row, rowIndex, db, refCache);
     if (rowErrors.length > 0) {
       rowErrors.forEach((e) => errors.push({ rowIndex, field: e.field, message: e.message }));
       continue;

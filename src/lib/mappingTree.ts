@@ -1,14 +1,22 @@
-import { Firestore } from "firebase/firestore";
-import { serverTimestamp } from "firebase/firestore";
+import { Firestore, collection as fsCollection, doc as fsDoc, DocumentReference, getDocs, limit, query, where, serverTimestamp } from "firebase/firestore";
 import { coerceValue, inferTypeFromSamples, type FirestoreType, type ArrayElementType } from "./coerce";
 import type { CollectionInfo } from "@/contexts/FirebaseContext";
+
+export type RefQuerySource = {
+  kind: "refQuery";
+  collection: string;
+  matchField: string;
+  matchSource: { kind: "column"; column: string } | { kind: "fixed"; value: string };
+  onMissing: "error" | "null";
+};
 
 export type Source =
   | { kind: "column"; column: string }
   | { kind: "fixed"; value: string }
   | { kind: "autoIncrement"; start: number; step: number }
   | { kind: "now" }
-  | { kind: "skip" };
+  | { kind: "skip" }
+  | RefQuerySource;
 
 export type LeafNode = {
   kind: "leaf";
@@ -82,17 +90,69 @@ export function buildInitialTree(
 
 export function resolveSource(source: Source, row: Record<string, unknown>, rowIndex: number): unknown {
   switch (source.kind) {
-    case "column":
-      return row[source.column];
-    case "fixed":
-      return source.value;
-    case "autoIncrement":
-      return source.start + rowIndex * source.step;
-    case "now":
-      return "__NOW__";
-    case "skip":
-      return null;
+    case "column": return row[source.column];
+    case "fixed": return source.value;
+    case "autoIncrement": return source.start + rowIndex * source.step;
+    case "now": return "__NOW__";
+    case "refQuery": return "__REF__";
+    case "skip": return null;
   }
+}
+
+export function refQueryCacheKey(collection: string, matchField: string, value: string): string {
+  return `${collection}\u0000${matchField}\u0000${value}`;
+}
+
+export function getRefMatchValue(src: RefQuerySource, row: Record<string, unknown>): string {
+  if (src.matchSource.kind === "column") {
+    const raw = row[src.matchSource.column];
+    return raw === null || raw === undefined ? "" : String(raw).trim();
+  }
+  return src.matchSource.value.trim();
+}
+
+export function collectRefQueryLookups(nodes: FieldNode[], rows: Record<string, unknown>[]): Array<{ collection: string; matchField: string; value: string; key: string }> {
+  const seen = new Set<string>();
+  const out: Array<{ collection: string; matchField: string; value: string; key: string }> = [];
+  const walk = (ns: FieldNode[]) => {
+    ns.forEach((n) => {
+      if (n.kind === "map") { walk(n.children); return; }
+      if (n.source.kind !== "refQuery") return;
+      const src = n.source;
+      if (!src.collection.trim() || !src.matchField.trim()) return;
+      rows.forEach((row) => {
+        const value = getRefMatchValue(src, row);
+        if (!value) return;
+        const key = refQueryCacheKey(src.collection, src.matchField, value);
+        if (seen.has(key)) return;
+        seen.add(key);
+        out.push({ collection: src.collection, matchField: src.matchField, value, key });
+      });
+    });
+  };
+  walk(nodes);
+  return out;
+}
+
+export async function resolveRefQueries(
+  lookups: Array<{ collection: string; matchField: string; value: string; key: string }>,
+  db: Firestore,
+): Promise<Map<string, DocumentReference | null>> {
+  const cache = new Map<string, DocumentReference | null>();
+  const CONCURRENCY = 10;
+  for (let i = 0; i < lookups.length; i += CONCURRENCY) {
+    const slice = lookups.slice(i, i + CONCURRENCY);
+    await Promise.all(slice.map(async (l) => {
+      try {
+        const q = query(fsCollection(db, l.collection), where(l.matchField, "==", l.value), limit(1));
+        const snap = await getDocs(q);
+        cache.set(l.key, snap.empty ? null : snap.docs[0].ref);
+      } catch {
+        cache.set(l.key, null);
+      }
+    }));
+  }
+  return cache;
 }
 
 export type RowBuildError = { field: string; message: string };
@@ -102,6 +162,7 @@ export function buildRowData(
   row: Record<string, unknown>,
   rowIndex: number,
   db: Firestore,
+  refCache?: Map<string, DocumentReference | null>,
   pathPrefix = "",
 ): { data: Record<string, unknown>; errors: RowBuildError[] } {
   const data: Record<string, unknown> = {};
@@ -113,26 +174,42 @@ export function buildRowData(
     const path = pathPrefix ? `${pathPrefix}.${name}` : name;
 
     if (node.kind === "map") {
-      const child = buildRowData(node.children, row, rowIndex, db, path);
+      const child = buildRowData(node.children, row, rowIndex, db, refCache, path);
       errors.push(...child.errors);
       if (Object.keys(child.data).length > 0) data[name] = child.data;
       continue;
     }
 
     if (node.source.kind === "skip") continue;
-    if (node.source.kind === "now") {
-      data[name] = serverTimestamp();
+    if (node.source.kind === "now") { data[name] = serverTimestamp(); continue; }
+
+    if (node.source.kind === "refQuery") {
+      const src = node.source;
+      if (!src.collection.trim() || !src.matchField.trim()) {
+        errors.push({ field: path, message: "Reference query missing collection or match field" });
+        continue;
+      }
+      const matchValue = getRefMatchValue(src, row);
+      if (!matchValue) {
+        if (src.onMissing === "error") errors.push({ field: path, message: "Empty match value for reference query" });
+        continue;
+      }
+      if (!refCache) { continue; }
+      const ref = refCache.get(refQueryCacheKey(src.collection, src.matchField, matchValue));
+      if (ref === undefined || ref === null) {
+        if (src.onMissing === "error") {
+          errors.push({ field: path, message: `No doc in "${src.collection}" where ${src.matchField} == "${matchValue}"` });
+        }
+        continue;
+      }
+      data[name] = ref;
       continue;
     }
+
     const raw = resolveSource(node.source, row, rowIndex);
     const res = coerceValue(raw, node.firestoreType, { db, arrayElementType: node.arrayElementType });
-    if (res.ok === false) {
-      errors.push({ field: path, message: res.error });
-      continue;
-    }
-    if (res.value !== null || node.firestoreType === "null") {
-      data[name] = res.value;
-    }
+    if (res.ok === false) { errors.push({ field: path, message: res.error }); continue; }
+    if (res.value !== null || node.firestoreType === "null") data[name] = res.value;
   }
   return { data, errors };
 }
@@ -143,17 +220,16 @@ export function collectBoundColumns(nodes: FieldNode[]): Set<string> {
     ns.forEach((n) => {
       if (n.kind === "map") walk(n.children);
       else if (n.source.kind === "column" && n.source.column) set.add(n.source.column);
+      else if (n.source.kind === "refQuery" && n.source.matchSource.kind === "column" && n.source.matchSource.column) {
+        set.add(n.source.matchSource.column);
+      }
     });
   };
   walk(nodes);
   return set;
 }
 
-export function updateNodeById(
-  nodes: FieldNode[],
-  id: string,
-  updater: (n: FieldNode) => FieldNode,
-): FieldNode[] {
+export function updateNodeById(nodes: FieldNode[], id: string, updater: (n: FieldNode) => FieldNode): FieldNode[] {
   return nodes.map((n) => {
     if (n.id === id) return updater(n);
     if (n.kind === "map") return { ...n, children: updateNodeById(n.children, id, updater) };
@@ -175,13 +251,10 @@ export function addChildToMap(nodes: FieldNode[], parentId: string, child: Field
   });
 }
 
-export function appendRoot(nodes: FieldNode[], child: FieldNode): FieldNode[] {
-  return [...nodes, child];
-}
+export function appendRoot(nodes: FieldNode[], child: FieldNode): FieldNode[] { return [...nodes, child]; }
 
 export function countNodes(nodes: FieldNode[]): { total: number; bound: number } {
-  let total = 0;
-  let bound = 0;
+  let total = 0; let bound = 0;
   const walk = (ns: FieldNode[]) => {
     ns.forEach((n) => {
       total += 1;
@@ -196,8 +269,7 @@ export function countNodes(nodes: FieldNode[]): { total: number; bound: number }
 export function findDuplicatesAtLevel(nodes: FieldNode[]): string[] {
   const dups: string[] = [];
   const walk = (ns: FieldNode[]) => {
-    const seen = new Set<string>();
-    const localDups = new Set<string>();
+    const seen = new Set<string>(); const localDups = new Set<string>();
     ns.forEach((n) => {
       const name = n.name.trim();
       if (!name) return;
@@ -210,3 +282,5 @@ export function findDuplicatesAtLevel(nodes: FieldNode[]): string[] {
   walk(nodes);
   return dups;
 }
+
+export { fsDoc };

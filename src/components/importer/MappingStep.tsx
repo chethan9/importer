@@ -30,6 +30,7 @@ import {
 } from "@/lib/mappingTree";
 import { ColumnPalette } from "./mapping/ColumnPalette";
 import { FieldTreeNode } from "./mapping/FieldTreeNode";
+import { FirestorePreview } from "./mapping/FirestorePreview";
 
 type DocIdStrategy = { kind: "auto" } | { kind: "column"; column: string };
 
@@ -291,6 +292,18 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
 
       <Card>
         <CardHeader className="pb-3">
+          <CardTitle className="text-base">Document preview</CardTitle>
+          <CardDescription>
+            How the first row will look as a Firestore document · switch to other rows to spot-check
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PreviewRowSwitcher file={file} tree={tree} db={db} docIdStrategy={docIdStrategy} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             {validation.errorCount === 0 ? (
               <><CheckCircle2 className="h-4 w-4 text-accent" /> Type validation preview</>
@@ -334,6 +347,46 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
           Continue to import <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </div>
+    </div>
+  );
+}
+
+function PreviewRowSwitcher({
+  file,
+  tree,
+  db,
+  docIdStrategy,
+}: {
+  file: ParsedFile;
+  tree: FieldNode[];
+  db: ReturnType<typeof useFirebase>["db"];
+  docIdStrategy: DocIdStrategy;
+}) {
+  const [rowIdx, setRowIdx] = useState(0);
+  const total = file.rows.length;
+  const row = file.rows[rowIdx] ?? {};
+  const docId =
+    docIdStrategy.kind === "column" && docIdStrategy.column
+      ? String(row[docIdStrategy.column] ?? "").trim() || "(missing)"
+      : undefined;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="text-xs text-muted-foreground">
+          Row <span className="font-mono text-foreground">{rowIdx + 1}</span> of{" "}
+          <span className="font-mono text-foreground">{total}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="sm" onClick={() => setRowIdx((i) => Math.max(0, i - 1))} disabled={rowIdx === 0}>
+            ← Prev
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setRowIdx((i) => Math.min(total - 1, i + 1))} disabled={rowIdx >= total - 1}>
+            Next →
+          </Button>
+        </div>
+      </div>
+      <FirestorePreview tree={tree} sampleRow={row} rowIndex={rowIdx} db={db} docId={docId} />
     </div>
   );
 }
