@@ -1,4 +1,5 @@
 import { Firestore } from "firebase/firestore";
+import { serverTimestamp } from "firebase/firestore";
 import { coerceValue, inferTypeFromSamples, type FirestoreType, type ArrayElementType } from "./coerce";
 import type { CollectionInfo } from "@/contexts/FirebaseContext";
 
@@ -6,6 +7,7 @@ export type Source =
   | { kind: "column"; column: string }
   | { kind: "fixed"; value: string }
   | { kind: "autoIncrement"; start: number; step: number }
+  | { kind: "now" }
   | { kind: "skip" };
 
 export type LeafNode = {
@@ -86,6 +88,8 @@ export function resolveSource(source: Source, row: Record<string, unknown>, rowI
       return source.value;
     case "autoIncrement":
       return source.start + rowIndex * source.step;
+    case "now":
+      return "__NOW__";
     case "skip":
       return null;
   }
@@ -116,6 +120,10 @@ export function buildRowData(
     }
 
     if (node.source.kind === "skip") continue;
+    if (node.source.kind === "now") {
+      data[name] = serverTimestamp();
+      continue;
+    }
     const raw = resolveSource(node.source, row, rowIndex);
     const res = coerceValue(raw, node.firestoreType, { db, arrayElementType: node.arrayElementType });
     if (res.ok === false) {

@@ -11,6 +11,7 @@ import {
   MinusCircle,
   Braces,
   CornerDownRight,
+  Clock,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -215,6 +216,7 @@ function SourceEditor({
           if (k === "column") onChange({ kind: "column", column: "" });
           else if (k === "fixed") onChange({ kind: "fixed", value: "" });
           else if (k === "autoIncrement") onChange({ kind: "autoIncrement", start: 1, step: 1 });
+          else if (k === "now") onChange({ kind: "now" });
           else onChange({ kind: "skip" });
         }}
       >
@@ -225,6 +227,7 @@ function SourceEditor({
           <SelectItem value="column" className="text-xs"><span className="inline-flex items-center gap-1.5"><Columns3 className="h-3 w-3" /> CSV column</span></SelectItem>
           <SelectItem value="fixed" className="text-xs"><span className="inline-flex items-center gap-1.5"><Lock className="h-3 w-3" /> Fixed value</span></SelectItem>
           <SelectItem value="autoIncrement" className="text-xs"><span className="inline-flex items-center gap-1.5"><Hash className="h-3 w-3" /> Auto-increment</span></SelectItem>
+          <SelectItem value="now" className="text-xs"><span className="inline-flex items-center gap-1.5"><Clock className="h-3 w-3" /> Current timestamp</span></SelectItem>
           <SelectItem value="skip" className="text-xs"><span className="inline-flex items-center gap-1.5 text-muted-foreground"><MinusCircle className="h-3 w-3" /> Skip</span></SelectItem>
         </SelectContent>
       </Select>
@@ -257,6 +260,12 @@ function SourceEditor({
             className="h-7 w-16 font-mono text-xs"
           />
           <span className="text-muted-foreground/70">→ {source.start}, {source.start + source.step}, {source.start + source.step * 2}…</span>
+        </div>
+      )}
+      {source.kind === "now" && (
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 font-mono text-[11px] text-primary">
+          <Clock className="h-3 w-3" />
+          <span>serverTimestamp() — set at write time</span>
         </div>
       )}
       {source.kind === "skip" && (
@@ -296,6 +305,7 @@ function SourceKindIcon({ kind }: { kind: Source["kind"] }) {
     case "column": return <Columns3 className="h-3.5 w-3.5 text-accent" />;
     case "fixed": return <Lock className="h-3.5 w-3.5 text-primary" />;
     case "autoIncrement": return <Hash className="h-3.5 w-3.5 text-primary" />;
+    case "now": return <Clock className="h-3.5 w-3.5 text-primary" />;
     default: return <MinusCircle className="h-3.5 w-3.5 text-muted-foreground" />;
   }
 }
