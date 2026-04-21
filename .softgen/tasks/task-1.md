@@ -1,6 +1,6 @@
 ---
 title: Design system + Firebase connect & collection browser
-status: todo
+status: in_progress
 priority: urgent
 type: feature
 tags: [design-system, firebase, ui]
