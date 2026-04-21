@@ -59,7 +59,6 @@ export async function inferSchemaAdmin(
     fields: data.fields.map((f) => ({
       name: f.name,
       type: (f.types[0] ?? "unknown") as FieldSchema["type"],
-      types: f.types as FieldSchema["types"],
       seenIn: data.docCount,
     })),
   };
