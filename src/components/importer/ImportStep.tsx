@@ -26,7 +26,6 @@ import { useFirebase } from "@/contexts/FirebaseContext";
 import type { ParsedFile } from "./UploadStep";
 import type { MappingConfig } from "./MappingStep";
 import { coerceValue } from "@/lib/coerce";
-import { resolveSourceValue } from "./MappingStep";
 import { buildRowData } from "@/lib/mappingTree";
 import {
   createImportRecord,
