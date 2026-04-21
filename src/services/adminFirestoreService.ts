@@ -1,5 +1,7 @@
 const SA_KEY = "fb-importer:serviceAccount";
 
+import type { FieldSchema } from "@/lib/firebase";
+
 export type ServiceAccount = {
   project_id: string;
   private_key: string;
@@ -47,7 +49,7 @@ export async function listCollectionsAdmin(sa: ServiceAccount): Promise<string[]
 export async function inferSchemaAdmin(
   sa: ServiceAccount,
   collection: string,
-): Promise<{ docCount: number; fields: Array<{ name: string; type: string; types: string[]; seenIn: number }> }> {
+): Promise<{ docCount: number; fields: FieldSchema[] }> {
   const data = await post<{ docCount: number; fields: Array<{ name: string; types: string[] }> }>(
     "/api/admin/infer-schema",
     { serviceAccount: sa, collection },
@@ -56,8 +58,8 @@ export async function inferSchemaAdmin(
     docCount: data.docCount,
     fields: data.fields.map((f) => ({
       name: f.name,
-      type: f.types[0] ?? "unknown",
-      types: f.types,
+      type: (f.types[0] ?? "unknown") as FieldSchema["type"],
+      types: f.types as FieldSchema["types"],
       seenIn: data.docCount,
     })),
   };
