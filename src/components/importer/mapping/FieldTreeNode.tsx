@@ -219,7 +219,7 @@ function SourceEditor({
           else if (k === "fixed") onChange({ kind: "fixed", value: "" });
           else if (k === "autoIncrement") onChange({ kind: "autoIncrement", start: 1, step: 1 });
           else if (k === "now") onChange({ kind: "now" });
-          else if (k === "refQuery") onChange({ kind: "refQuery", targetCollection: "", matchField: "", valueFrom: { kind: "column", column: "" }, onMissing: "null" });
+          else if (k === "refQuery") onChange({ kind: "refQuery", collection: "", matchField: "", matchSource: { kind: "column", column: "" }, onMissing: "null" });
           else onChange({ kind: "skip" });
         }}
       >
@@ -330,13 +330,13 @@ function RefQueryEditor({
   const { collections } = useFirebase();
   const collectionNames = collections.map((c) => c.name);
   const sampleColumns = Object.keys(sampleRow);
-  const valFrom = source.valueFrom;
+  const valFrom = source.matchSource;
 
   return (
     <div className="flex flex-1 flex-wrap items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 font-mono text-[11px]">
       <span className="text-muted-foreground">ref →</span>
       {collectionNames.length > 0 ? (
-        <Select value={source.targetCollection} onValueChange={(v) => onChange({ ...source, targetCollection: v })}>
+        <Select value={source.collection} onValueChange={(v) => onChange({ ...source, collection: v })}>
           <SelectTrigger className="h-6 w-32 border-border/60 bg-background px-1.5 text-[11px]">
             <SelectValue placeholder="collection" />
           </SelectTrigger>
@@ -348,8 +348,8 @@ function RefQueryEditor({
         </Select>
       ) : (
         <Input
-          value={source.targetCollection}
-          onChange={(e) => onChange({ ...source, targetCollection: e.target.value })}
+          value={source.collection}
+          onChange={(e) => onChange({ ...source, collection: e.target.value })}
           placeholder="collection"
           className="h-6 w-32 border-border/60 bg-background px-1.5 font-mono text-[11px]"
         />
@@ -365,8 +365,8 @@ function RefQueryEditor({
       <Select
         value={valFrom.kind}
         onValueChange={(v) => {
-          if (v === "column") onChange({ ...source, valueFrom: { kind: "column", column: sampleColumns[0] ?? "" } });
-          else onChange({ ...source, valueFrom: { kind: "fixed", value: "" } });
+          if (v === "column") onChange({ ...source, matchSource: { kind: "column", column: sampleColumns[0] ?? "" } });
+          else onChange({ ...source, matchSource: { kind: "fixed", value: "" } });
         }}
       >
         <SelectTrigger className="h-6 w-[60px] border-border/60 bg-background px-1.5 text-[11px]">
@@ -378,7 +378,7 @@ function RefQueryEditor({
         </SelectContent>
       </Select>
       {valFrom.kind === "column" ? (
-        <Select value={valFrom.column} onValueChange={(v) => onChange({ ...source, valueFrom: { kind: "column", column: v } })}>
+        <Select value={valFrom.column} onValueChange={(v) => onChange({ ...source, matchSource: { kind: "column", column: v } })}>
           <SelectTrigger className="h-6 w-32 border-border/60 bg-background px-1.5 text-[11px]">
             <SelectValue placeholder="column" />
           </SelectTrigger>
@@ -391,7 +391,7 @@ function RefQueryEditor({
       ) : (
         <Input
           value={valFrom.value}
-          onChange={(e) => onChange({ ...source, valueFrom: { kind: "fixed", value: e.target.value } })}
+          onChange={(e) => onChange({ ...source, matchSource: { kind: "fixed", value: e.target.value } })}
           placeholder="value"
           className="h-6 w-28 border-border/60 bg-background px-1.5 font-mono text-[11px]"
         />
