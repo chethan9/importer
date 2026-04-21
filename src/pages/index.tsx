@@ -36,7 +36,7 @@ export default function Home() {
           <Stepper current={step} connected={connected} />
           <main className="mt-8">
             {step === 1 && <ConnectStep />}
-            {step === 2 && connected && <BrowseStep onContinue={() => setStep(3)} />}
+            {step === 2 && connected && <BrowseStep />}
             {step === 3 && connected && collectionInfo && (
               <UploadStep
                 value={file}
