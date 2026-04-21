@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FirebaseError } from "firebase/app";
-import { Loader2, Link2, History, AlertCircle, KeyRound, Shield, Globe } from "lucide-react";
+import { Loader2, Link2, History, AlertCircle, KeyRound, Shield, Globe, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,6 +41,7 @@ export function ConnectStep() {
   const [loading, setLoading] = useState(false);
   const [hasLast, setHasLast] = useState(false);
   const [hasLastSa, setHasLastSa] = useState(false);
+  const saFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setHasLast(!!loadLastConfig());
@@ -60,6 +61,20 @@ export function ConnectStep() {
     if (!sa) return;
     setSaJson(JSON.stringify(sa, null, 2));
     toast({ title: "Loaded last service account", description: sa.project_id });
+  };
+
+  const handleSaFile = async (file: File | undefined) => {
+    if (!file) return;
+    if (file.size > 64 * 1024) { setError("Service account file is unexpectedly large (>64KB)."); return; }
+    try {
+      const text = await file.text();
+      JSON.parse(text);
+      setSaJson(text);
+      setError(null);
+      toast({ title: "Loaded file", description: file.name });
+    } catch {
+      setError("Selected file is not valid JSON.");
+    }
   };
 
   const tryParseJson = (raw: string): Record<string, unknown> | null => {
@@ -151,11 +166,23 @@ export function ConnectStep() {
               </Alert>
               <div className="flex items-center justify-between">
                 <Label htmlFor="sa" className="text-xs font-medium text-muted-foreground">Service account JSON</Label>
-                {hasLastSa && (
-                  <Button size="sm" variant="ghost" onClick={loadLastSa} className="gap-1.5 h-7">
-                    <History className="h-3.5 w-3.5" /> Load last used
+                <div className="flex items-center gap-1">
+                  <input
+                    ref={saFileRef}
+                    type="file"
+                    accept=".json,application/json"
+                    className="hidden"
+                    onChange={(e) => void handleSaFile(e.target.files?.[0])}
+                  />
+                  <Button size="sm" variant="ghost" onClick={() => saFileRef.current?.click()} className="gap-1.5 h-7">
+                    <Upload className="h-3.5 w-3.5" /> Upload JSON file
                   </Button>
-                )}
+                  {hasLastSa && (
+                    <Button size="sm" variant="ghost" onClick={loadLastSa} className="gap-1.5 h-7">
+                      <History className="h-3.5 w-3.5" /> Load last used
+                    </Button>
+                  )}
+                </div>
               </div>
               <Textarea
                 id="sa"
