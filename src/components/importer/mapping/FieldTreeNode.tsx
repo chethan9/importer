@@ -12,12 +12,14 @@ import {
   Braces,
   CornerDownRight,
   Clock,
+  Link2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { FIRESTORE_TYPES, type FirestoreType, type ArrayElementType } from "@/lib/coerce";
+import { useFirebase } from "@/contexts/FirebaseContext";
 import type { FieldNode, LeafNode, MapNode, Source } from "@/lib/mappingTree";
 
 type Props = {
@@ -217,6 +219,7 @@ function SourceEditor({
           else if (k === "fixed") onChange({ kind: "fixed", value: "" });
           else if (k === "autoIncrement") onChange({ kind: "autoIncrement", start: 1, step: 1 });
           else if (k === "now") onChange({ kind: "now" });
+          else if (k === "refQuery") onChange({ kind: "refQuery", targetCollection: "", matchField: "", valueFrom: { kind: "column", column: "" }, onMissing: "null" });
           else onChange({ kind: "skip" });
         }}
       >
@@ -228,6 +231,7 @@ function SourceEditor({
           <SelectItem value="fixed" className="text-xs"><span className="inline-flex items-center gap-1.5"><Lock className="h-3 w-3" /> Fixed value</span></SelectItem>
           <SelectItem value="autoIncrement" className="text-xs"><span className="inline-flex items-center gap-1.5"><Hash className="h-3 w-3" /> Auto-increment</span></SelectItem>
           <SelectItem value="now" className="text-xs"><span className="inline-flex items-center gap-1.5"><Clock className="h-3 w-3" /> Current timestamp</span></SelectItem>
+          <SelectItem value="refQuery" className="text-xs"><span className="inline-flex items-center gap-1.5"><Link2 className="h-3 w-3" /> Reference by query</span></SelectItem>
           <SelectItem value="skip" className="text-xs"><span className="inline-flex items-center gap-1.5 text-muted-foreground"><MinusCircle className="h-3 w-3" /> Skip</span></SelectItem>
         </SelectContent>
       </Select>
@@ -268,6 +272,9 @@ function SourceEditor({
           <span>serverTimestamp() — set at write time</span>
         </div>
       )}
+      {source.kind === "refQuery" && (
+        <RefQueryEditor source={source} sampleRow={sampleRow} onChange={onChange} />
+      )}
       {source.kind === "skip" && (
         <div className="flex-1 rounded border border-dashed border-border/80 px-2 py-1 text-[11px] italic text-muted-foreground/80">
           drop a column here, or pick a source ←
@@ -306,6 +313,99 @@ function SourceKindIcon({ kind }: { kind: Source["kind"] }) {
     case "fixed": return <Lock className="h-3.5 w-3.5 text-primary" />;
     case "autoIncrement": return <Hash className="h-3.5 w-3.5 text-primary" />;
     case "now": return <Clock className="h-3.5 w-3.5 text-primary" />;
+    case "refQuery": return <Link2 className="h-3.5 w-3.5 text-primary" />;
     default: return <MinusCircle className="h-3.5 w-3.5 text-muted-foreground" />;
   }
+}
+
+function RefQueryEditor({
+  source,
+  sampleRow,
+  onChange,
+}: {
+  source: Extract<Source, { kind: "refQuery" }>;
+  sampleRow: Record<string, unknown>;
+  onChange: (s: Source) => void;
+}) {
+  const { collections } = useFirebase();
+  const collectionNames = collections.map((c) => c.name);
+  const sampleColumns = Object.keys(sampleRow);
+  const valFrom = source.valueFrom;
+
+  return (
+    <div className="flex flex-1 flex-wrap items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 font-mono text-[11px]">
+      <span className="text-muted-foreground">ref →</span>
+      {collectionNames.length > 0 ? (
+        <Select value={source.targetCollection} onValueChange={(v) => onChange({ ...source, targetCollection: v })}>
+          <SelectTrigger className="h-6 w-32 border-border/60 bg-background px-1.5 text-[11px]">
+            <SelectValue placeholder="collection" />
+          </SelectTrigger>
+          <SelectContent>
+            {collectionNames.map((c) => (
+              <SelectItem key={c} value={c} className="font-mono text-xs">{c}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : (
+        <Input
+          value={source.targetCollection}
+          onChange={(e) => onChange({ ...source, targetCollection: e.target.value })}
+          placeholder="collection"
+          className="h-6 w-32 border-border/60 bg-background px-1.5 font-mono text-[11px]"
+        />
+      )}
+      <span className="text-muted-foreground">where</span>
+      <Input
+        value={source.matchField}
+        onChange={(e) => onChange({ ...source, matchField: e.target.value })}
+        placeholder="fieldName"
+        className="h-6 w-28 border-border/60 bg-background px-1.5 font-mono text-[11px]"
+      />
+      <span className="text-muted-foreground">==</span>
+      <Select
+        value={valFrom.kind}
+        onValueChange={(v) => {
+          if (v === "column") onChange({ ...source, valueFrom: { kind: "column", column: sampleColumns[0] ?? "" } });
+          else onChange({ ...source, valueFrom: { kind: "fixed", value: "" } });
+        }}
+      >
+        <SelectTrigger className="h-6 w-[60px] border-border/60 bg-background px-1.5 text-[11px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="column" className="text-xs">col</SelectItem>
+          <SelectItem value="fixed" className="text-xs">fixed</SelectItem>
+        </SelectContent>
+      </Select>
+      {valFrom.kind === "column" ? (
+        <Select value={valFrom.column} onValueChange={(v) => onChange({ ...source, valueFrom: { kind: "column", column: v } })}>
+          <SelectTrigger className="h-6 w-32 border-border/60 bg-background px-1.5 text-[11px]">
+            <SelectValue placeholder="column" />
+          </SelectTrigger>
+          <SelectContent>
+            {sampleColumns.map((c) => (
+              <SelectItem key={c} value={c} className="font-mono text-xs">{c}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : (
+        <Input
+          value={valFrom.value}
+          onChange={(e) => onChange({ ...source, valueFrom: { kind: "fixed", value: e.target.value } })}
+          placeholder="value"
+          className="h-6 w-28 border-border/60 bg-background px-1.5 font-mono text-[11px]"
+        />
+      )}
+      <span className="text-muted-foreground">·</span>
+      <Select value={source.onMissing} onValueChange={(v) => onChange({ ...source, onMissing: v as "null" | "error" })}>
+        <SelectTrigger className="h-6 w-[88px] border-border/60 bg-background px-1.5 text-[11px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="null" className="text-xs">null if missing</SelectItem>
+          <SelectItem value="error" className="text-xs">error if missing</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
 }
