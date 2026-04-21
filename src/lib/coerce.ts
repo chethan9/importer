@@ -175,3 +175,40 @@ export function inferType(value: unknown): FirestoreType {
   if (typeof value === "object") return "map";
   return "string";
 }
+
+export function inferTypeFromSamples(values: unknown[]): FirestoreType {
+  const nonBlank = values.filter((v) => !(v === null || v === undefined || (typeof v === "string" && v.trim() === "")));
+  if (nonBlank.length === 0) return "string";
+
+  const votes: Record<FirestoreType, number> = {
+    string: 0, number: 0, boolean: 0, timestamp: 0, geopoint: 0,
+    reference: 0, array: 0, map: 0, null: 0, bytes: 0,
+  };
+
+  for (const v of nonBlank) {
+    if (typeof v === "boolean") { votes.boolean++; continue; }
+    if (typeof v === "number") { votes.number++; continue; }
+    if (Array.isArray(v)) { votes.array++; continue; }
+    if (typeof v === "object" && v !== null) { votes.map++; continue; }
+    const s = String(v).trim();
+    if (/^(true|false|yes|no)$/i.test(s)) { votes.boolean++; continue; }
+    if (/^-?\d+(\.\d+)?$/.test(s) && s.length < 16) { votes.number++; continue; }
+    if (/^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2})?/.test(s)) { votes.timestamp++; continue; }
+    if (/^-?\d{1,3}(\.\d+)?\s*,\s*-?\d{1,3}(\.\d+)?$/.test(s)) { votes.geopoint++; continue; }
+    if (s.startsWith("[") && s.endsWith("]")) { votes.array++; continue; }
+    if (s.startsWith("{") && s.endsWith("}")) { votes.map++; continue; }
+    votes.string++;
+  }
+
+  const threshold = nonBlank.length * 0.8;
+  const priority: FirestoreType[] = ["boolean", "number", "timestamp", "geopoint", "array", "map", "string"];
+  for (const t of priority) {
+    if (votes[t] >= threshold) return t;
+  }
+  let best: FirestoreType = "string";
+  let bestCount = -1;
+  for (const t of priority) {
+    if (votes[t] > bestCount) { bestCount = votes[t]; best = t; }
+  }
+  return best;
+}

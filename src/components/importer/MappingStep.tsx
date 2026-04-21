@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { ArrowLeft, ArrowRight, AlertTriangle, CheckCircle2, Plus, Trash2, Hash, Columns3, Lock, MinusCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, AlertTriangle, CheckCircle2, Plus, Trash2, Hash, Columns3, Lock, MinusCircle, Wand2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { ImportMode } from "@/services/importService";
-import { FIRESTORE_TYPES, coerceValue, inferType, type FirestoreType, type ArrayElementType } from "@/lib/coerce";
+import { FIRESTORE_TYPES, coerceValue, inferType, inferTypeFromSamples, type FirestoreType, type ArrayElementType } from "@/lib/coerce";
 import type { ParsedFile } from "./UploadStep";
 import type { CollectionInfo } from "@/contexts/FirebaseContext";
 import { useFirebase } from "@/contexts/FirebaseContext";
@@ -84,7 +84,12 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
     updateMapping(idx, { source });
   }
 
-  function changeSourceKind(idx: number, kind: MappingSource["kind"]) {
+  function autoDetectTypeForColumn(column: string): FirestoreType {
+    const samples = file.rows.slice(0, 50).map((r) => r[column]);
+    return inferTypeFromSamples(samples);
+  }
+
+  function handleSourceKindChange(idx: number, kind: MappingSource["kind"]) {
     const current = mappings[idx];
     let next: MappingSource;
     switch (kind) {
@@ -101,7 +106,31 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
         next = { kind: "skip" };
     }
     if (current.source.kind === kind) return;
-    updateSource(idx, next);
+    if (next.kind === "column" && next.column) {
+      const detected = autoDetectTypeForColumn(next.column);
+      updateMapping(idx, { source: next, firestoreType: detected });
+    } else {
+      updateSource(idx, next);
+    }
+  }
+
+  function handleColumnChange(idx: number, column: string) {
+    const detected = autoDetectTypeForColumn(column);
+    updateMapping(idx, { source: { kind: "column", column }, firestoreType: detected });
+  }
+
+  function smartDetectAll() {
+    setMappings((prev) =>
+      prev.map((m) => {
+        if (m.source.kind !== "column" || !m.source.column) return m;
+        const detected = autoDetectTypeForColumn(m.source.column);
+        return { ...m, firestoreType: detected };
+      }),
+    );
+  }
+
+  function changeSourceKind(idx: number, kind: MappingSource["kind"]) {
+    handleSourceKindChange(idx, kind);
   }
 
   function addCustomField() {
@@ -209,6 +238,9 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
                 {activeMappings.length} of {mappings.length} field{mappings.length === 1 ? "" : "s"} will be written · {file.columns.length} CSV columns available
               </CardDescription>
             </div>
+            <Button variant="outline" size="sm" onClick={smartDetectAll} title="Auto-detect Firestore type from sample values">
+              <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Smart detect types
+            </Button>
             <Button variant="outline" size="sm" onClick={addCustomField}>
               <Plus className="mr-1.5 h-3.5 w-3.5" /> Add field
             </Button>
@@ -227,6 +259,7 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
               onArrayElType={(t) => updateMapping(idx, { arrayElementType: t })}
               onSourceKind={(k) => changeSourceKind(idx, k)}
               onSource={(s) => updateSource(idx, s)}
+              onColumnChange={(c) => handleColumnChange(idx, c)}
               onRemove={() => removeMapping(idx)}
             />
           ))}
@@ -307,6 +340,7 @@ type FieldRowProps = {
   onArrayElType: (v: ArrayElementType) => void;
   onSourceKind: (k: MappingSource["kind"]) => void;
   onSource: (s: MappingSource) => void;
+  onColumnChange: (c: string) => void;
   onRemove: () => void;
 };
 
@@ -320,6 +354,7 @@ function FieldRow({
   onArrayElType,
   onSourceKind,
   onSource,
+  onColumnChange,
   onRemove,
 }: FieldRowProps) {
   const src = mapping.source;
@@ -398,7 +433,7 @@ function FieldRow({
 
             {src.kind === "column" && (
               <div className="flex-1 space-y-1">
-                <Select value={src.column} onValueChange={(v) => onSource({ kind: "column", column: v })}>
+                <Select value={src.column} onValueChange={onColumnChange}>
                   <SelectTrigger className="h-9 font-mono text-xs">
                     <SelectValue placeholder="Select column" />
                   </SelectTrigger>
