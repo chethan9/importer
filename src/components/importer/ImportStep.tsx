@@ -27,6 +27,7 @@ import type { ParsedFile } from "./UploadStep";
 import type { MappingConfig } from "./MappingStep";
 import { coerceValue } from "@/lib/coerce";
 import { resolveSourceValue } from "./MappingStep";
+import { buildRowData } from "@/lib/mappingTree";
 import {
   createImportRecord,
   logImportedDocs,
@@ -78,7 +79,7 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
         collectionName,
         mode: config.mode,
         totalRows: file.rows.length,
-        mappings: config.mappings,
+        mappings: config.tree,
       });
       setImportId(newImportId);
     } catch (err) {
@@ -307,23 +308,11 @@ async function processBatch(
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const rowIndex = offset + i;
-    const data: Record<string, unknown> = {};
-    let rowHasError = false;
-
-    for (const m of config.mappings) {
-      if (m.source.kind === "skip" || !m.targetField.trim()) continue;
-      const raw = resolveSourceValue(m.source, row, rowIndex);
-      const res = coerceValue(raw, m.firestoreType, { db, arrayElementType: m.arrayElementType });
-      if (res.ok === false) {
-        errors.push({ rowIndex, field: m.targetField, message: res.error });
-        rowHasError = true;
-        break;
-      }
-      if (res.value !== null || m.firestoreType === "null") {
-        data[m.targetField] = res.value;
-      }
+    const { data, errors: rowErrors } = buildRowData(config.tree, row, rowIndex, db);
+    if (rowErrors.length > 0) {
+      rowErrors.forEach((e) => errors.push({ rowIndex, field: e.field, message: e.message }));
+      continue;
     }
-    if (rowHasError) continue;
 
     let docRef;
     let docId: string;

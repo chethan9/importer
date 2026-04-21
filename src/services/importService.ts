@@ -8,10 +8,14 @@ export type MappingSource =
   | { kind: "skip" };
 
 export type ImportMapping = {
-  targetField: string;
-  firestoreType: FirestoreType;
+  targetField?: string;
+  firestoreType?: FirestoreType;
   arrayElementType?: ArrayElementType;
-  source: MappingSource;
+  source?: MappingSource;
+  kind?: "leaf" | "map";
+  id?: string;
+  name?: string;
+  children?: ImportMapping[];
 };
 
 export type ImportMode = "create" | "merge";
@@ -35,7 +39,7 @@ export async function createImportRecord(input: {
   collectionName: string;
   mode: ImportMode;
   totalRows: number;
-  mappings: ImportMapping[];
+  mappings: unknown;
 }): Promise<string> {
   const payload = {
     project_id: input.projectId,
