@@ -9,28 +9,18 @@ type DocOp = {
   rowIndex: number;
 };
 
-function reviveSentinels(value: unknown): unknown {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
+function revive(db: FirebaseFirestore.Firestore, value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((v) => revive(db, v));
+  if (value && typeof value === "object") {
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== Object.prototype && proto !== null) return value;
     const o = value as Record<string, unknown>;
     if (o.__type === "serverTimestamp") return FieldValue.serverTimestamp();
-    if (o.__type === "ref" && typeof o.path === "string") return { __ref__: o.path };
+    if (o.__type === "ref" && typeof o.path === "string") return db.doc(o.path);
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(o)) out[k] = reviveSentinels(v);
+    for (const [k, v] of Object.entries(o)) out[k] = revive(db, v);
     return out;
   }
-  if (Array.isArray(value)) return value.map(reviveSentinels);
-  return value;
-}
-
-function resolveRefs(db: FirebaseFirestore.Firestore, value: unknown): unknown {
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    const o = value as Record<string, unknown>;
-    if (typeof o.__ref__ === "string") return db.doc(o.__ref__);
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(o)) out[k] = resolveRefs(db, v);
-    return out;
-  }
-  if (Array.isArray(value)) return value.map((v) => resolveRefs(db, v));
   return value;
 }
 
@@ -84,7 +74,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           }
         }
 
-        const data = resolveRefs(db, reviveSentinels(op.data)) as Record<string, unknown>;
+        const data = revive(db, op.data) as Record<string, unknown>;
         if (op.merge) batch.set(ref, data, { merge: true });
         else batch.set(ref, data);
         queued.push({ ref, op, preSnapshot, action });

@@ -16,6 +16,7 @@ import {
   RotateCcw,
   History,
   FileSpreadsheet,
+  Gauge,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,10 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
   const [successResults, setSuccessResults] = useState<LiveResult[]>([]);
   const [importId, setImportId] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<Date | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string>("");
+  const [batchInfo, setBatchInfo] = useState<{ current: number; total: number } | null>(null);
+  const [rowsPerSec, setRowsPerSec] = useState<number>(0);
+  const [elapsedSec, setElapsedSec] = useState<number>(0);
   const [limitEnabled, setLimitEnabled] = useState(false);
   const [rowLimit, setRowLimit] = useState<number>(Math.min(10, file.rows.length));
   const cancelRef = useRef(false);
@@ -77,21 +82,47 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
 
   useEffect(() => () => { cancelRef.current = true; }, []);
 
+  useEffect(() => {
+    if (phase !== "running" || !startedAt) return;
+    const interval = setInterval(() => {
+      const elapsed = (Date.now() - startedAt.getTime()) / 1000;
+      setElapsedSec(Math.round(elapsed));
+      if (elapsed > 0) setRowsPerSec(Math.round((successCount + errorCount) / elapsed));
+    }, 500);
+    return () => clearInterval(interval);
+  }, [phase, startedAt, successCount, errorCount]);
+
   async function run() {
-    if (authMode === "web" && (!db || !fbConfig)) return;
-    if (authMode === "admin" && !serviceAccount) return;
+    if (authMode === "web" && (!db || !fbConfig)) {
+      toast({ title: "Not connected", description: "Firebase web connection missing. Go back to Connect step.", variant: "destructive" });
+      return;
+    }
+    if (authMode === "admin" && !serviceAccount) {
+      toast({ title: "Not connected", description: "Service account missing. Go back to Connect step.", variant: "destructive" });
+      return;
+    }
+    if (rowsToImport.length === 0) {
+      toast({ title: "Nothing to import", description: "No rows selected.", variant: "destructive" });
+      return;
+    }
+
     setPhase("running");
     setProgress(0);
     setSuccessCount(0);
     setErrorCount(0);
     setErrors([]);
     setSuccessResults([]);
+    setStatusMessage("Starting import…");
+    setBatchInfo(null);
+    setRowsPerSec(0);
+    setElapsedSec(0);
     cancelRef.current = false;
     const now = new Date();
     setStartedAt(now);
 
     let newImportId: string;
     try {
+      setStatusMessage("Logging import to history…");
       const projectIdForLog = fbConfig?.projectId ?? serviceAccount?.project_id ?? "unknown";
       newImportId = await createImportRecord({
         projectId: projectIdForLog,
@@ -108,15 +139,15 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
         variant: "destructive",
       });
       setPhase("failed");
+      setStatusMessage("");
       return;
     }
 
-    // Pre-resolve all reference queries in parallel
     let refCache: Map<string, unknown> | undefined;
     try {
       const lookups = collectRefQueryLookups(config.tree, rowsToImport);
       if (lookups.length > 0) {
-        toast({ title: "Resolving references", description: `Looking up ${lookups.length} unique doc${lookups.length === 1 ? "" : "s"}…` });
+        setStatusMessage(`Resolving ${lookups.length} reference lookup${lookups.length === 1 ? "" : "s"}…`);
         if (authMode === "admin" && serviceAccount) {
           refCache = new Map();
           for (const l of lookups) {
@@ -141,10 +172,15 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
     const localErrors: ImportErrorEntry[] = [];
     let localSuccess = 0;
     const localResults: LiveResult[] = [];
+    const totalBatches = Math.ceil(rowsToImport.length / BATCH_SIZE);
 
     for (let batchStart = 0; batchStart < rowsToImport.length; batchStart += BATCH_SIZE) {
       if (cancelRef.current) break;
+      const batchIdx = Math.floor(batchStart / BATCH_SIZE) + 1;
       const slice = rowsToImport.slice(batchStart, batchStart + BATCH_SIZE);
+      setBatchInfo({ current: batchIdx, total: totalBatches });
+      setStatusMessage(`Writing batch ${batchIdx} of ${totalBatches} · ${slice.length} rows…`);
+
       const result = authMode === "admin" && serviceAccount
         ? await processBatchAdmin(serviceAccount, collectionName, slice, batchStart, config, localErrors, refCache)
         : await processBatch(db!, collectionName, slice, batchStart, config, localErrors, refCache as never);
@@ -160,6 +196,7 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
 
       if (result.written.length) {
         try {
+          setStatusMessage(`Logging batch ${batchIdx} results…`);
           const rows: ImportedDocRecord[] = result.written.map((w) => ({
             import_id: newImportId,
             doc_id: w.docId,
@@ -175,6 +212,7 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
     }
 
     const finalStatus: "completed" | "failed" = localErrors.length > 0 && localSuccess === 0 ? "failed" : "completed";
+    setStatusMessage("Finalizing…");
     await finalizeImport(newImportId, {
       successCount: localSuccess,
       errorCount: localErrors.length,
@@ -182,6 +220,8 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
       status: finalStatus,
     });
 
+    setBatchInfo(null);
+    setStatusMessage("");
     setPhase(finalStatus === "completed" ? "done" : "failed");
     toast({
       title: finalStatus === "completed" ? "Import complete" : "Import finished with errors",
@@ -293,9 +333,19 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
         <CardHeader>
           <CardTitle className="text-base flex items-center justify-between">
             <span>Progress</span>
-            <Badge variant="outline" className="font-mono text-[11px]">
-              {phase === "idle" ? "Ready" : phase === "running" ? "Running…" : phase === "done" ? "Completed" : "Failed"}
-            </Badge>
+            <div className="flex items-center gap-1.5">
+              {phase === "running" && batchInfo && (
+                <Badge variant="secondary" className="font-mono text-[10px]">Batch {batchInfo.current}/{batchInfo.total}</Badge>
+              )}
+              {phase === "running" && rowsPerSec > 0 && (
+                <Badge variant="secondary" className="font-mono text-[10px]">
+                  <Gauge className="mr-1 h-3 w-3" /> {rowsPerSec} rows/s
+                </Badge>
+              )}
+              <Badge variant="outline" className="font-mono text-[11px]">
+                {phase === "idle" ? "Ready" : phase === "running" ? "Running…" : phase === "done" ? "Completed" : "Failed"}
+              </Badge>
+            </div>
           </CardTitle>
           <CardDescription>
             Mode: <span className="font-medium text-foreground">{config.mode === "merge" ? "Merge / upsert" : "Create new"}</span>
@@ -306,7 +356,21 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Progress value={progress} className="h-2" />
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-muted-foreground font-mono">
+              <span>{progress}% · {successCount + errorCount} of {rowsToImport.length} processed</span>
+              {(phase === "running" || phase === "done" || phase === "failed") && elapsedSec > 0 && (
+                <span>{elapsedSec}s elapsed</span>
+              )}
+            </div>
+            <Progress value={progress} className="h-2" />
+            {statusMessage && phase === "running" && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>{statusMessage}</span>
+              </div>
+            )}
+          </div>
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-md border bg-card p-3">
               <div className="text-xs text-muted-foreground">Total</div>
@@ -329,7 +393,7 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
           )}
           {phase === "running" && (
             <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Writing to Firestore…
+              <Loader2 className="h-4 w-4 animate-spin" /> {statusMessage || "Writing to Firestore…"}
             </div>
           )}
           {phase === "done" && (
