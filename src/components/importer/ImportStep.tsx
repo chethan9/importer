@@ -645,7 +645,7 @@ async function processBatchAdmin(
         }
 
         const res = coerceValue(raw, node.firestoreType, { arrayElementType: node.arrayElementType });
-        if (!res.ok) { rowErrs.push({ field: name, message: res.error }); continue; }
+        if (res.ok === false) { rowErrs.push({ field: name, message: res.error }); continue; }
         if (res.value !== null || node.firestoreType === "null") target[name] = toAdminJSON(res.value);
       }
     };
