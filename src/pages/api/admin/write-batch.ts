@@ -52,43 +52,63 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     };
 
     const results = await withAdmin(serviceAccount, async (db) => {
-      const out: ResultRow[] = [];
-      const batch = db.batch();
-      const queued: Array<{ ref: FirebaseFirestore.DocumentReference; op: DocOp; preSnapshot: Record<string, unknown> | null; action: "created" | "updated" }> = [];
+      const refsToRead: FirebaseFirestore.DocumentReference[] = [];
+      const opMeta: Array<{
+        op: DocOp;
+        ref: FirebaseFirestore.DocumentReference;
+        readIdx: number | null;
+      }> = [];
 
       for (const op of ops) {
         const ref = op.docId
           ? db.collection(collection).doc(op.docId)
           : db.collection(collection).doc();
+        const readIdx = checkExisting && op.docId ? refsToRead.length : null;
+        if (readIdx !== null) refsToRead.push(ref);
+        opMeta.push({ op, ref, readIdx });
+      }
 
+      let snapshots: FirebaseFirestore.DocumentSnapshot[] = [];
+      if (refsToRead.length > 0) {
+        try {
+          snapshots = await db.getAll(...refsToRead);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Batch pre-read failed";
+          return opMeta.map(({ op, ref }) => ({
+            docId: ref.id,
+            action: "created" as const,
+            preSnapshot: null,
+            rowIndex: op.rowIndex,
+            error: `Pre-read failed: ${msg}`,
+          }));
+        }
+      }
+
+      const batch = db.batch();
+      const queued: Array<{
+        ref: FirebaseFirestore.DocumentReference;
+        op: DocOp;
+        preSnapshot: Record<string, unknown> | null;
+        action: "created" | "updated";
+      }> = [];
+
+      for (const { op, ref, readIdx } of opMeta) {
         let preSnapshot: Record<string, unknown> | null = null;
         let action: "created" | "updated" = "created";
-
-        if (checkExisting && op.docId) {
-          try {
-            const snap = await ref.get();
-            if (snap.exists) {
-              preSnapshot = (snap.data() as Record<string, unknown>) ?? null;
-              action = "updated";
-            }
-          } catch (err) {
-            out.push({
-              docId: ref.id,
-              action: "created",
-              preSnapshot: null,
-              rowIndex: op.rowIndex,
-              error: err instanceof Error ? err.message : "Pre-read failed",
-            });
-            continue;
+        if (readIdx !== null) {
+          const snap = snapshots[readIdx];
+          if (snap && snap.exists) {
+            preSnapshot = (snap.data() as Record<string, unknown>) ?? null;
+            action = "updated";
           }
         }
-
         const data = revive(db, op.data) as Record<string, unknown>;
         if (op.merge) batch.set(ref, data, { merge: true });
         else batch.set(ref, data);
         queued.push({ ref, op, preSnapshot, action });
       }
 
+      const out: ResultRow[] = [];
       try {
         if (queued.length > 0) await batch.commit();
         queued.forEach((q) =>
