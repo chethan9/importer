@@ -295,6 +295,37 @@ export function addChildToMap(nodes: FieldNode[], parentId: string, child: Field
 
 export function appendRoot(nodes: FieldNode[], child: FieldNode): FieldNode[] { return [...nodes, child]; }
 
+export type NodeContext = { node: FieldNode; parentId: string | null; index: number };
+
+export function findNodeWithContext(nodes: FieldNode[], id: string, parentId: string | null = null): NodeContext | null {
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    if (n.id === id) return { node: n, parentId, index: i };
+    if (n.kind === "map") {
+      const found = findNodeWithContext(n.children, id, n.id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+export function insertAt(nodes: FieldNode[], parentId: string | null, index: number, node: FieldNode): FieldNode[] {
+  if (parentId === null) {
+    const copy = [...nodes];
+    copy.splice(Math.min(index, copy.length), 0, node);
+    return copy;
+  }
+  return nodes.map((n) => {
+    if (n.kind === "map" && n.id === parentId) {
+      const children = [...n.children];
+      children.splice(Math.min(index, children.length), 0, node);
+      return { ...n, children };
+    }
+    if (n.kind === "map") return { ...n, children: insertAt(n.children, parentId, index, node) };
+    return n;
+  });
+}
+
 export function countNodes(nodes: FieldNode[]): { total: number; bound: number } {
   let total = 0; let bound = 0;
   const walk = (ns: FieldNode[]) => {

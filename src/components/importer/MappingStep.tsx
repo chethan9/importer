@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, AlertTriangle, CheckCircle2, Plus, Wand2, Braces } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, AlertTriangle, CheckCircle2, Plus, Wand2, Braces, Undo2, History } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,7 @@ import { useFirebase } from "@/contexts/FirebaseContext";
 import {
   type FieldNode,
   type LeafNode,
+  type NodeContext,
   buildInitialTree,
   buildRowData,
   collectBoundColumns,
@@ -25,12 +26,17 @@ import {
   appendRoot,
   countNodes,
   findDuplicatesAtLevel,
+  findNodeWithContext,
+  insertAt,
   makeLeaf,
   makeMap,
 } from "@/lib/mappingTree";
 import { ColumnPalette } from "./mapping/ColumnPalette";
 import { FieldTreeNode } from "./mapping/FieldTreeNode";
 import { FirestorePreview } from "./mapping/FirestorePreview";
+import { useToast } from "@/hooks/use-toast";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { ToastAction } from "@/components/ui/toast";
 
 type DocIdStrategy = { kind: "auto" } | { kind: "column"; column: string };
 
@@ -51,9 +57,13 @@ type Props = {
 
 export function MappingStep({ file, collection, value, onChange, onBack, onNext }: Props) {
   const { db } = useFirebase();
+  const { toast } = useToast();
   const [tree, setTree] = useState<FieldNode[]>(() => value?.tree ?? buildInitialTree(collection, file.columns, file.rows));
   const [mode, setMode] = useState<ImportMode>(value?.mode ?? "create");
   const [docIdStrategy, setDocIdStrategy] = useState<DocIdStrategy>(value?.docIdStrategy ?? { kind: "auto" });
+  const [deletionHistory, setDeletionHistory] = useState<Array<NodeContext & { deletedAt: number; displayName: string }>>([]);
+  const treeRef = useRef(tree);
+  treeRef.current = tree;
 
   useEffect(() => {
     onChange({ tree, mode, docIdStrategy });
@@ -104,7 +114,23 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
     setTree((t) => updateNodeById(t, id, (n) => (n.kind === "map" ? makeLeaf(n.name || "newField") : n)));
   }
   function onRemove(id: string) {
+    const ctx = findNodeWithContext(treeRef.current, id);
+    if (!ctx) return;
+    const displayName = ctx.node.name.trim() || (ctx.node.kind === "map" ? "(unnamed map)" : "(unnamed field)");
+    const entry = { ...ctx, deletedAt: Date.now(), displayName };
+    const restore = () => {
+      setTree((t) => insertAt(t, entry.parentId, entry.index, entry.node));
+      setDeletionHistory((h) => h.filter((d) => d.deletedAt !== entry.deletedAt));
+    };
     setTree((t) => removeNodeById(t, id));
+    setDeletionHistory((h) => [entry, ...h].slice(0, 20));
+    toast({
+      title: `Removed "${displayName}"`,
+      description: ctx.node.kind === "map" && ctx.node.children.length > 0
+        ? `Including ${ctx.node.children.length} nested field${ctx.node.children.length === 1 ? "" : "s"}`
+        : "Click Undo to restore",
+      action: <ToastAction altText="Undo" onClick={restore}>Undo</ToastAction>,
+    });
   }
   function onAddRoot() {
     setTree((t) => appendRoot(t, makeLeaf("newField")));
@@ -137,6 +163,13 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
         });
       return walk(t);
     });
+  }
+
+  function restoreFromHistory(deletedAt: number) {
+    const entry = deletionHistory.find((d) => d.deletedAt === deletedAt);
+    if (!entry) return;
+    setTree((t) => insertAt(t, entry.parentId, entry.index, entry.node));
+    setDeletionHistory((h) => h.filter((d) => d.deletedAt !== deletedAt));
   }
 
   const canProceed =
@@ -229,6 +262,35 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
               </CardDescription>
             </div>
             <div className="flex gap-1.5">
+              {deletionHistory.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" title="Restore a recently deleted field">
+                      <Undo2 className="mr-1.5 h-3.5 w-3.5" /> Restore ({deletionHistory.length})
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-72">
+                    <DropdownMenuLabel className="text-xs">Recently deleted</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {deletionHistory.map((d) => (
+                      <DropdownMenuItem
+                        key={d.deletedAt}
+                        onClick={() => restoreFromHistory(d.deletedAt)}
+                        className="flex items-center justify-between gap-3"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate font-mono text-xs">{d.displayName}</div>
+                          <div className="text-[10px] text-muted-foreground">
+                            {d.node.kind === "map" ? "map" : (d.node as LeafNode).firestoreType}
+                            {d.parentId ? " · nested" : " · root"}
+                          </div>
+                        </div>
+                        <History className="h-3 w-3 text-muted-foreground" />
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
               <Button variant="outline" size="sm" onClick={onSmartDetect} title="Auto-detect Firestore type from sample values">
                 <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Smart detect types
               </Button>
