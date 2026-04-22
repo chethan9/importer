@@ -1,6 +1,6 @@
 ---
 title: Resumable imports + retry failed rows
-status: todo
+status: in_progress
 priority: high
 type: feature
 tags: [reliability, supabase, resume]
@@ -31,13 +31,15 @@ Today a failed or interrupted import leaves the user stuck: they must re-run the
 Existing files: `src/services/importService.ts`, `src/components/importer/ImportStep.tsx`, `src/components/importer/HistorySheet.tsx`, `supabase/migrations/`.
 
 ## Checklist
-- [ ] DB migration: add `last_processed_row`, `file_signature`, `failed_rows` columns; expand status CHECK to allow 'paused'
-- [ ] importService: `updateImportProgress(importId, {last_processed_row, status})` called after each successful batch
-- [ ] importService: `appendFailedRows(importId, rows)` batches failed-row writes to Supabase
-- [ ] File signature: compute hash client-side (file name + row count + header list) and save on import creation
-- [ ] History Sheet: "Resume" button on paused imports, opens file picker, validates signature, launches import at last_processed_row + 1
-- [ ] History Sheet: "Retry failed" button on completed imports with errors; runs only the saved failed rows
-- [ ] Duplicate guard: when resuming in 'create' mode with column IDs, pre-fetch existing doc_ids from imported_docs and skip them
+- [x] DB migration: add last_processed_row, file_signature, failed_rows columns; expand status CHECK to include 'paused'
+- [x] importService: computeFileSignature, updateImportProgress, pauseImport, markImportResuming helpers
+- [x] ImportStep: persist last_processed_row + success/error counts + failed_rows after every batch
+- [x] ImportStep: on fatal error (network/Firestore exception), call pauseImport and exit without finalizing
+- [x] ImportStep: accept resumeInfo prop to continue from a specific row with prior success/error state
+- [x] ImportStep: yield to main thread after each batch (setTimeout 0) so UI remains responsive
+- [ ] HistorySheet: show paused status badge + last_processed_row / total_rows progress
+- [ ] HistorySheet: Resume button (paused) + Retry Failed button (completed with errors) — emit callback
+- [ ] index.tsx: wire resume flow — file re-upload + signature validation → re-enter ImportStep with resumeInfo
 
 ## Acceptance
 - Close the tab mid-import → reopen history → "Resume" continues from the correct row without re-writing successful rows.

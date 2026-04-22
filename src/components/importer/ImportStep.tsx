@@ -33,8 +33,13 @@ import {
   createImportRecord,
   logImportedDocs,
   finalizeImport,
+  updateImportProgress,
+  pauseImport,
+  markImportResuming,
+  computeFileSignature,
   type ImportErrorEntry,
   type ImportedDocRecord,
+  type FailedRowRecord,
 } from "@/services/importService";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
@@ -50,6 +55,7 @@ type Props = {
   onBack: () => void;
   onReset: () => void;
   onOpenHistory: () => void;
+  resumeInfo?: { importId: string; startRow: number; priorSuccess: number; priorErrors: number; priorFailedRows: FailedRowRecord[] };
 };
 
 type Phase = "idle" | "running" | "done" | "failed";
@@ -58,7 +64,7 @@ const BATCH_SIZE = 400;
 
 type LiveResult = { rowIndex: number; docId: string; docPath: string };
 
-export function ImportStep({ file, collectionName, config, onBack, onReset, onOpenHistory }: Props) {
+export function ImportStep({ file, collectionName, config, onBack, onReset, onOpenHistory, resumeInfo }: Props) {
   const { db, config: fbConfig, authMode, serviceAccount } = useFirebase();
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("idle");
@@ -109,11 +115,11 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
 
     setPhase("running");
     setProgress(0);
-    setSuccessCount(0);
-    setErrorCount(0);
+    setSuccessCount(resumeInfo?.priorSuccess ?? 0);
+    setErrorCount(resumeInfo?.priorErrors ?? 0);
     setErrors([]);
     setSuccessResults([]);
-    setStatusMessage("Starting import…");
+    setStatusMessage(resumeInfo ? "Resuming import…" : "Starting import…");
     setBatchInfo(null);
     setRowsPerSec(0);
     setElapsedSec(0);
@@ -121,18 +127,26 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
     const now = new Date();
     setStartedAt(now);
 
-    let newImportId: string;
+    let activeImportId: string;
+    const failedRows: FailedRowRecord[] = resumeInfo?.priorFailedRows ? [...resumeInfo.priorFailedRows] : [];
     try {
-      setStatusMessage("Logging import to history…");
-      const projectIdForLog = fbConfig?.projectId ?? serviceAccount?.project_id ?? "unknown";
-      newImportId = await createImportRecord({
-        projectId: projectIdForLog,
-        collectionName,
-        mode: config.mode,
-        totalRows: rowsToImport.length,
-        mappings: config.tree,
-      });
-      setImportId(newImportId);
+      if (resumeInfo) {
+        setStatusMessage(`Resuming import from row ${resumeInfo.startRow + 1}…`);
+        await markImportResuming(resumeInfo.importId);
+        activeImportId = resumeInfo.importId;
+      } else {
+        setStatusMessage("Logging import to history…");
+        const projectIdForLog = fbConfig?.projectId ?? serviceAccount?.project_id ?? "unknown";
+        activeImportId = await createImportRecord({
+          projectId: projectIdForLog,
+          collectionName,
+          mode: config.mode,
+          totalRows: rowsToImport.length,
+          mappings: config.tree,
+          fileSignature: computeFileSignature(file.columns, file.rows.length),
+        });
+      }
+      setImportId(activeImportId);
     } catch (err) {
       toast({
         title: "Could not start import",
@@ -176,24 +190,49 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
     }
 
     const localErrors: ImportErrorEntry[] = [];
-    let localSuccess = 0;
+    let localSuccess = resumeInfo?.priorSuccess ?? 0;
     const localResults: LiveResult[] = [];
+    const startBatch = resumeInfo ? Math.floor(resumeInfo.startRow / BATCH_SIZE) * BATCH_SIZE : 0;
     const totalBatches = Math.ceil(rowsToImport.length / BATCH_SIZE);
 
-    for (let batchStart = 0; batchStart < rowsToImport.length; batchStart += BATCH_SIZE) {
+    for (let batchStart = startBatch; batchStart < rowsToImport.length; batchStart += BATCH_SIZE) {
       if (cancelRef.current) break;
       const batchIdx = Math.floor(batchStart / BATCH_SIZE) + 1;
       const slice = rowsToImport.slice(batchStart, batchStart + BATCH_SIZE);
       setBatchInfo({ current: batchIdx, total: totalBatches });
       setStatusMessage(`Writing batch ${batchIdx} of ${totalBatches} · ${slice.length} rows…`);
 
-      const result = authMode === "admin" && serviceAccount
-        ? await processBatchAdmin(serviceAccount, collectionName, slice, batchStart, config, localErrors, refCache)
-        : await processBatch(db!, collectionName, slice, batchStart, config, localErrors, refCache as never);
+      let result: { written: WrittenDoc[] };
+      try {
+        result = authMode === "admin" && serviceAccount
+          ? await processBatchAdmin(serviceAccount, collectionName, slice, batchStart, config, localErrors, refCache)
+          : await processBatch(db!, collectionName, slice, batchStart, config, localErrors, refCache as never);
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : "Unknown network/Firestore error";
+        await pauseImport(activeImportId, reason, batchStart, localSuccess, localErrors.length, failedRows);
+        setPhase("failed");
+        setStatusMessage(`Paused at row ${batchStart + 1}. Resume from history.`);
+        toast({
+          title: "Import paused",
+          description: `${reason}. Progress saved — you can resume from History.`,
+          variant: "destructive",
+        });
+        return;
+      }
       localSuccess += result.written.length;
       result.written.forEach((w) => {
         localResults.push({ rowIndex: w.rowIndex, docId: w.docId, docPath: `${collectionName}/${w.docId}` });
       });
+
+      // Capture any errors from this batch into failedRows (with raw row data for retry)
+      const newErrorsInBatch = localErrors.slice(-1 * Math.max(0, slice.length));
+      newErrorsInBatch.forEach((e) => {
+        if (e.rowIndex >= batchStart && e.rowIndex < batchStart + slice.length) {
+          const rawRow = rowsToImport[e.rowIndex];
+          failedRows.push({ rowIndex: e.rowIndex, field: e.field, message: e.message, rawRow });
+        }
+      });
+
       setSuccessCount(localSuccess);
       setErrorCount(localErrors.length);
       setErrors([...localErrors]);
@@ -204,7 +243,7 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
         try {
           setStatusMessage(`Logging batch ${batchIdx} results…`);
           const rows: ImportedDocRecord[] = result.written.map((w) => ({
-            import_id: newImportId,
+            import_id: activeImportId,
             doc_id: w.docId,
             action: w.action,
             pre_existing_snapshot: w.preSnapshot,
@@ -215,11 +254,26 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
           console.warn("Failed to log batch to Supabase:", err);
         }
       }
+
+      try {
+        await updateImportProgress(
+          activeImportId,
+          batchStart + slice.length,
+          localSuccess,
+          localErrors.length,
+          failedRows,
+        );
+      } catch (err) {
+        console.warn("Progress update failed:", err);
+      }
+
+      // Yield to main thread so UI stays responsive during large imports
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
 
     const finalStatus: "completed" | "failed" = localErrors.length > 0 && localSuccess === 0 ? "failed" : "completed";
     setStatusMessage("Finalizing…");
-    await finalizeImport(newImportId, {
+    await finalizeImport(activeImportId, {
       successCount: localSuccess,
       errorCount: localErrors.length,
       errorLog: localErrors,
