@@ -1,72 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Work+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer base {
-  :root {
-    --background: 36 33% 97%;
-    --foreground: 240 8% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 8% 11%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 8% 11%;
-    --primary: 10 78% 54%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 36 18% 91%;
-    --secondary-foreground: 240 8% 15%;
-    --muted: 36 18% 93%;
-    --muted-foreground: 240 5% 42%;
-    --accent: 173 78% 32%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 72% 50%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 36 14% 86%;
-    --input: 36 14% 86%;
-    --ring: 10 78% 54%;
-    --radius: 0.5rem;
-    --chart-1: 10 78% 54%;
-    --chart-2: 173 78% 32%;
-    --chart-3: 240 8% 30%;
-    --chart-4: 36 80% 50%;
-    --chart-5: 220 70% 50%;
-  }
-}
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-  html, body {
-    @apply bg-background text-foreground;
-  }
-  body {
-    font-family: "Work Sans", system-ui, -apple-system, sans-serif;
-    font-feature-settings: "ss01", "cv11";
-    -webkit-font-smoothing: antialiased;
-  }
-  h1, h2, h3, h4, h5, h6 {
-    font-family: Sora, system-ui, sans-serif;
-    @apply tracking-tight;
-    letter-spacing: -0.015em;
-  }
-  code, kbd, pre, .font-mono {
-    font-family: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
-  }
-}
-
-@layer utilities {
-  .card-lift {
-    @apply bg-card ring-1 ring-border/70 shadow-sm;
-  }
-  .field-chip {
-    @apply inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-xs font-mono text-foreground/80 ring-1 ring-border;
-  }
-  .bg-grid {
-    background-image:
-      linear-gradient(to right, hsl(var(--border) / 0.4) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(var(--border) / 0.4) 1px, transparent 1px);
+<![CDATA[@import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=Work+Sans:wght
+...
+ssor: transparent 1px);
     background-size: 32px 32px;
   }
 }
+]]>
+
+[Tool result trimmed: kept first 100 chars and last 100 chars of 1915 chars.]
