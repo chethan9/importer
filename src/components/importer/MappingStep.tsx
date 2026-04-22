@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, AlertTriangle, CheckCircle2, Plus, Wand2, Braces, Undo2, History } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { ArrowLeft, ArrowRight, AlertTriangle, CheckCircle2, Plus, Wand2, Braces, Undo2, History, Bookmark, BookmarkPlus, Trash2, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -37,6 +37,10 @@ import { FirestorePreview } from "./mapping/FirestorePreview";
 import { useToast } from "@/hooks/use-toast";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { ToastAction } from "@/components/ui/toast";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { collectBoundColumns as _collectBoundColumns } from "@/lib/mappingTree";
+import { listPresets, savePreset, updatePreset, deletePreset, type MappingPreset } from "@/services/presetService";
 
 type DocIdStrategy = { kind: "auto" } | { kind: "column"; column: string };
 
@@ -56,14 +60,34 @@ type Props = {
 };
 
 export function MappingStep({ file, collection, value, onChange, onBack, onNext }: Props) {
-  const { db } = useFirebase();
+  const { db, config: fbConfig } = useFirebase();
   const { toast } = useToast();
   const [tree, setTree] = useState<FieldNode[]>(() => value?.tree ?? buildInitialTree(collection, file.columns, file.rows));
   const [mode, setMode] = useState<ImportMode>(value?.mode ?? "create");
   const [docIdStrategy, setDocIdStrategy] = useState<DocIdStrategy>(value?.docIdStrategy ?? { kind: "auto" });
   const [deletionHistory, setDeletionHistory] = useState<Array<NodeContext & { deletedAt: number; displayName: string }>>([]);
+  const [presets, setPresets] = useState<MappingPreset[]>([]);
+  const [presetsLoading, setPresetsLoading] = useState(false);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saveName, setSaveName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const treeRef = useRef(tree);
   treeRef.current = tree;
+
+  const refreshPresets = useCallback(async () => {
+    setPresetsLoading(true);
+    try {
+      const list = await listPresets(collection.name);
+      setPresets(list);
+    } catch (err) {
+      console.warn("Load presets failed:", err);
+    } finally {
+      setPresetsLoading(false);
+    }
+  }, [collection.name]);
+
+  useEffect(() => { void refreshPresets(); }, [refreshPresets]);
 
   useEffect(() => {
     onChange({ tree, mode, docIdStrategy });
@@ -172,6 +196,82 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
     setDeletionHistory((h) => h.filter((d) => d.deletedAt !== deletedAt));
   }
 
+  async function onSavePreset() {
+    if (!saveName.trim()) return;
+    setSaving(true);
+    try {
+      const saved = await savePreset({
+        name: saveName.trim(),
+        projectId: fbConfig?.projectId ?? null,
+        collectionName: collection.name,
+        mode,
+        docIdStrategy,
+        mappingTree: tree,
+      });
+      setActivePresetId(saved.id);
+      setSaveOpen(false);
+      setSaveName("");
+      await refreshPresets();
+      toast({ title: "Preset saved", description: `"${saved.name}" saved for ${collection.name}` });
+    } catch (err) {
+      toast({ title: "Save failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onUpdateActivePreset() {
+    if (!activePresetId) return;
+    const target = presets.find((p) => p.id === activePresetId);
+    if (!target) return;
+    setSaving(true);
+    try {
+      await updatePreset(activePresetId, { mode, docIdStrategy, mappingTree: tree });
+      await refreshPresets();
+      toast({ title: "Preset updated", description: `"${target.name}" overwritten with current mapping` });
+    } catch (err) {
+      toast({ title: "Update failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function onLoadPreset(p: MappingPreset) {
+    const boundCols = new Set<string>();
+    const walk = (nodes: FieldNode[]) => nodes.forEach((n) => {
+      if (n.kind === "map") walk(n.children);
+      else if (n.source.kind === "column") boundCols.add(n.source.column);
+      else if (n.source.kind === "refManual") boundCols.add(n.source.column);
+      else if (n.source.kind === "refQuery" && n.source.matchSource.kind === "column") boundCols.add(n.source.matchSource.column);
+    });
+    walk(p.mappingTree);
+    const fileCols = new Set(file.columns);
+    const missing = [...boundCols].filter((c) => !fileCols.has(c));
+    setTree(p.mappingTree);
+    setMode(p.mode);
+    setDocIdStrategy(p.docIdStrategy);
+    setActivePresetId(p.id);
+    toast({
+      title: `Loaded "${p.name}"`,
+      description: missing.length > 0
+        ? `⚠ ${missing.length} bound column${missing.length === 1 ? "" : "s"} not in current file: ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? "…" : ""}`
+        : `${p.mappingTree.length} root fields applied`,
+      variant: missing.length > 0 ? "destructive" : "default",
+    });
+  }
+
+  async function onDeletePreset(p: MappingPreset) {
+    if (!confirm(`Delete preset "${p.name}"?`)) return;
+    try {
+      await deletePreset(p.id);
+      if (activePresetId === p.id) setActivePresetId(null);
+      await refreshPresets();
+      toast({ title: "Preset deleted" });
+    } catch (err) {
+      toast({ title: "Delete failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    }
+  }
+
   const canProceed =
     bound > 0 &&
     duplicates.length === 0 &&
@@ -261,7 +361,59 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
                 {unmappedCount > 0 && ` · ${unmappedCount} unmapped`}
               </CardDescription>
             </div>
-            <div className="flex gap-1.5">
+            <div className="flex flex-wrap gap-1.5">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" title="Saved mapping presets">
+                    <Bookmark className="mr-1.5 h-3.5 w-3.5" />
+                    {activePresetId && presets.find((p) => p.id === activePresetId)?.name
+                      ? `Preset: ${presets.find((p) => p.id === activePresetId)?.name}`
+                      : `Presets${presets.length > 0 ? ` (${presets.length})` : ""}`}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-80">
+                  <DropdownMenuLabel className="text-xs">Mapping presets · {collection.name}</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => { setSaveName(""); setSaveOpen(true); }} className="text-xs">
+                    <BookmarkPlus className="mr-2 h-3.5 w-3.5" /> Save current mapping as preset…
+                  </DropdownMenuItem>
+                  {activePresetId && (
+                    <DropdownMenuItem onClick={() => void onUpdateActivePreset()} disabled={saving} className="text-xs">
+                      <Bookmark className="mr-2 h-3.5 w-3.5" /> Overwrite active preset with current mapping
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-[10px] text-muted-foreground">
+                    {presetsLoading ? "Loading…" : presets.length === 0 ? "No presets yet" : "Load a preset"}
+                  </DropdownMenuLabel>
+                  {presets.map((p) => (
+                    <DropdownMenuItem
+                      key={p.id}
+                      className="flex items-start justify-between gap-2 text-xs"
+                      onSelect={(e) => { e.preventDefault(); }}
+                    >
+                      <button
+                        type="button"
+                        className="flex-1 min-w-0 text-left"
+                        onClick={() => onLoadPreset(p)}
+                      >
+                        <div className="truncate font-medium">{p.name}</div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {p.mode} · {p.docIdStrategy.kind === "auto" ? "auto ID" : `ID: ${p.docIdStrategy.column}`} · {new Date(p.updatedAt).toLocaleDateString()}
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={(e) => { e.stopPropagation(); void onDeletePreset(p); }}
+                        title="Delete preset"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
               {deletionHistory.length > 0 && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -409,6 +561,33 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
           Continue to import <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </div>
+
+      <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save mapping preset</DialogTitle>
+            <DialogDescription>
+              Save the current field bindings, mode, and doc ID strategy for <span className="font-mono text-foreground">{collection.name}</span>. You can load it next time you import into this collection.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="preset-name" className="text-xs">Preset name</Label>
+            <Input
+              id="preset-name"
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              placeholder="e.g. Monthly services import"
+              onKeyDown={(e) => { if (e.key === "Enter" && saveName.trim()) void onSavePreset(); }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSaveOpen(false)}>Cancel</Button>
+            <Button variant="accent" onClick={() => void onSavePreset()} disabled={!saveName.trim() || saving}>
+              {saving ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Saving…</> : "Save preset"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
