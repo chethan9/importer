@@ -145,20 +145,62 @@ export function collectRefQueryLookups(nodes: FieldNode[], rows: Record<string, 
 export async function resolveRefQueries(
   lookups: Array<{ collection: string; matchField: string; value: string; key: string }>,
   db: Firestore,
+  onProgress?: (done: number, total: number) => void,
 ): Promise<Map<string, DocumentReference | null>> {
   const cache = new Map<string, DocumentReference | null>();
-  const CONCURRENCY = 10;
-  for (let i = 0; i < lookups.length; i += CONCURRENCY) {
-    const slice = lookups.slice(i, i + CONCURRENCY);
-    await Promise.all(slice.map(async (l) => {
-      try {
-        const q = query(fsCollection(db, l.collection), where(l.matchField, "==", l.value), limit(1));
-        const snap = await getDocs(q);
-        cache.set(l.key, snap.empty ? null : snap.docs[0].ref);
-      } catch {
-        cache.set(l.key, null);
-      }
-    }));
+  if (lookups.length === 0) return cache;
+
+  // Pre-populate with null so unresolved values return null (not undefined)
+  lookups.forEach((l) => cache.set(l.key, null));
+
+  // Group by (collection, matchField)
+  const groups = new Map<string, { collection: string; matchField: string; values: Set<string> }>();
+  for (const l of lookups) {
+    if (!l.collection.trim() || !l.matchField.trim()) continue;
+    const gkey = `${l.collection}\u0000${l.matchField}`;
+    if (!groups.has(gkey)) {
+      groups.set(gkey, { collection: l.collection, matchField: l.matchField, values: new Set() });
+    }
+    groups.get(gkey)!.values.add(l.value);
+  }
+
+  const CHUNK = 30;
+  const tasks: Array<() => Promise<void>> = [];
+  for (const g of groups.values()) {
+    const uniqueValues = Array.from(g.values);
+    for (let i = 0; i < uniqueValues.length; i += CHUNK) {
+      const chunk = uniqueValues.slice(i, i + CHUNK);
+      tasks.push(async () => {
+        try {
+          const q = query(fsCollection(db, g.collection), where(g.matchField, "in", chunk));
+          const snap = await getDocs(q);
+          snap.forEach((docSnap) => {
+            const fieldVal = docSnap.get(g.matchField);
+            if (fieldVal === undefined || fieldVal === null) return;
+            const key = refQueryCacheKey(g.collection, g.matchField, String(fieldVal));
+            if (!cache.get(key)) cache.set(key, docSnap.ref);
+          });
+        } catch (err) {
+          console.warn("resolveRefQueries chunk failed:", err);
+        }
+      });
+    }
+  }
+
+  const total = tasks.length;
+  let done = 0;
+  onProgress?.(0, total);
+  const CONCURRENCY = 6;
+  for (let i = 0; i < tasks.length; i += CONCURRENCY) {
+    const slice = tasks.slice(i, i + CONCURRENCY);
+    await Promise.all(
+      slice.map((t) =>
+        t().then(() => {
+          done += 1;
+          onProgress?.(done, total);
+        }),
+      ),
+    );
   }
   return cache;
 }

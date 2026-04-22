@@ -150,20 +150,25 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
       if (lookups.length > 0) {
         setStatusMessage(`Resolving ${lookups.length} reference lookup${lookups.length === 1 ? "" : "s"}…`);
         if (authMode === "admin" && serviceAccount) {
+          const fetchRes = await fetch("/api/admin/resolve-refs-batch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              serviceAccount,
+              lookups: lookups.map((l) => ({ collection: l.collection, matchField: l.matchField, value: l.value })),
+            }),
+          });
+          const j = await fetchRes.json();
           refCache = new Map();
-          for (const l of lookups) {
-            try {
-              const res = await fetch("/api/admin/resolve-ref", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ serviceAccount, collection: l.collection, field: l.matchField, value: l.value }),
-              });
-              const j = await res.json();
-              if (res.ok && j.path) refCache.set(l.key, j.path);
-            } catch { /* cache miss */ }
+          lookups.forEach((l) => refCache!.set(l.key, null));
+          if (fetchRes.ok && j.paths) {
+            Object.entries(j.paths as Record<string, string>).forEach(([k, v]) => refCache!.set(k, v));
           }
+          setStatusMessage(`Resolved ${Object.keys(j.paths ?? {}).length} of ${lookups.length} references`);
         } else {
-          refCache = await resolveRefQueries(lookups, db!) as Map<string, unknown>;
+          refCache = (await resolveRefQueries(lookups, db!, (doneChunks, totalChunks) => {
+            setStatusMessage(`Resolving references: ${doneChunks}/${totalChunks} query chunks`);
+          })) as Map<string, unknown>;
         }
       }
     } catch (err) {
