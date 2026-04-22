@@ -117,18 +117,27 @@ export function BrowseStep() {
   const selected = collections.find((c) => c.name === selectedCollection);
 
   return (
-    <div className="mx-auto w-full max-w-5xl animate-fade-in-up space-y-6 px-6 pb-16">
+    <div className="mx-auto w-full max-w-5xl animate-fade-in-up space-y-6 px-4 pb-20 sm:px-6">
+      <div className="flex items-center gap-3">
+        <div
+          className="flex h-11 w-11 items-center justify-center rounded-full text-white shadow-md"
+          style={{ backgroundColor: "hsl(var(--step-browse))" }}
+        >
+          <Database className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Browse collections</h2>
+          <p className="text-sm text-muted-foreground">
+            Add collections by name — Firestore&apos;s Web SDK can&apos;t list them automatically.
+          </p>
+        </div>
+      </div>
+
       <Card className="card-lift">
         <CardHeader className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded bg-primary/10 text-primary ring-1 ring-primary/20">
-              <Database className="h-3.5 w-3.5" />
-            </div>
-            <CardTitle className="text-xl">Browse collections</CardTitle>
-          </div>
+          <CardTitle className="text-base">Add a collection</CardTitle>
           <CardDescription>
-            Firestore's Web SDK can&apos;t list collections automatically — add them by name. Schema
-            is inferred from the first 20 docs.
+            Schema is inferred from the first 20 docs. Separate names with commas.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -270,11 +279,12 @@ function CollectionCard({
       type="button"
       onClick={onSelect}
       className={cn(
-        "group relative rounded-lg border bg-card p-4 text-left transition-all hover:shadow-md",
+        "group relative rounded-xl border bg-card p-4 text-left transition-all hover:shadow-md",
         selected
-          ? "border-primary ring-2 ring-primary/30 shadow-sm"
+          ? "shadow-sm"
           : "border-border hover:border-primary/40",
       )}
+      style={selected ? { borderColor: "hsl(var(--step-browse))", boxShadow: "0 0 0 3px hsl(var(--step-browse) / 0.2)" } : undefined}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">

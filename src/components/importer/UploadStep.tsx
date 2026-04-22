@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { Upload, FileSpreadsheet, X, ArrowRight, ArrowLeft, FileText } from "lucide-react";
@@ -22,11 +22,33 @@ type Props = {
   collectionName: string;
 };
 
+function useCountUp(target: number, duration = 600) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    const start = Date.now();
+    const from = 0;
+    let raf = 0;
+    const step = () => {
+      const elapsed = Date.now() - start;
+      const t = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setVal(Math.round(from + (target - from) * eased));
+      if (t < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return val;
+}
+
 export function UploadStep({ value, onChange, onBack, onNext, collectionName }: Props) {
   const [isDragging, setIsDragging] = useState(false);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  const rowsDisplay = useCountUp(value?.rows.length ?? 0);
+  const colsDisplay = useCountUp(value?.columns.length ?? 0);
 
   async function handleFile(file: File) {
     setLoading(true);
@@ -71,22 +93,28 @@ export function UploadStep({ value, onChange, onBack, onNext, collectionName }: 
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="font-heading text-2xl font-semibold">Upload source file</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          CSV, TSV or Excel. Rows will be imported into{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{collectionName}</code>.
-        </p>
+    <div className="mx-auto w-full max-w-4xl animate-fade-in-up space-y-6 px-4 pb-20 sm:px-6">
+      <div className="flex items-center gap-3">
+        <div
+          className="flex h-11 w-11 items-center justify-center rounded-full text-white shadow-md"
+          style={{ backgroundColor: "hsl(var(--step-upload))" }}
+        >
+          <Upload className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Upload source file</h2>
+          <p className="text-sm text-muted-foreground">
+            CSV, TSV or Excel — rows go into{" "}
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{collectionName}</code>
+          </p>
+        </div>
       </div>
 
       {!value ? (
         <Card
-          className={`border-dashed transition-colors ${isDragging ? "border-primary bg-primary/5" : ""}`}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setIsDragging(true);
-          }}
+          className={`card-lift border-2 border-dashed transition-all ${isDragging ? "scale-[1.01]" : ""}`}
+          style={isDragging ? { borderColor: "hsl(var(--step-upload))", backgroundColor: "hsl(var(--step-upload) / 0.05)" } : undefined}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={(e) => {
             e.preventDefault();
@@ -95,9 +123,12 @@ export function UploadStep({ value, onChange, onBack, onNext, collectionName }: 
             if (f) handleFile(f);
           }}
         >
-          <CardContent className="flex flex-col items-center gap-4 py-16 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-              <Upload className="h-6 w-6 text-primary" />
+          <CardContent className="flex flex-col items-center gap-4 py-12 text-center sm:py-16">
+            <div
+              className="flex h-16 w-16 items-center justify-center rounded-full text-white shadow-md"
+              style={{ backgroundColor: "hsl(var(--step-upload))" }}
+            >
+              <FileSpreadsheet className="h-7 w-7" />
             </div>
             <div>
               <p className="font-medium">Drop your file here</p>
@@ -121,20 +152,28 @@ export function UploadStep({ value, onChange, onBack, onNext, collectionName }: 
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardHeader className="flex flex-row items-start justify-between space-y-0">
+        <Card className="card-lift">
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
-                <FileSpreadsheet className="h-5 w-5 text-accent" />
+              <div
+                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-white shadow-sm"
+                style={{ backgroundColor: "hsl(var(--step-upload))" }}
+              >
+                <FileSpreadsheet className="h-5 w-5" />
               </div>
-              <div>
-                <CardTitle className="font-mono text-base">{value.fileName}</CardTitle>
-                <CardDescription>
-                  {value.rows.length} rows · {value.columns.length} columns
+              <div className="min-w-0">
+                <CardTitle className="truncate font-mono text-base">{value.fileName}</CardTitle>
+                <CardDescription className="flex flex-wrap items-center gap-2 pt-1">
+                  <Badge variant="secondary" className="gap-1 font-mono text-[10px] tabular-nums">
+                    <span className="font-semibold">{rowsDisplay.toLocaleString()}</span> rows
+                  </Badge>
+                  <Badge variant="secondary" className="gap-1 font-mono text-[10px] tabular-nums">
+                    <span className="font-semibold">{colsDisplay}</span> columns
+                  </Badge>
                 </CardDescription>
               </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => onChange(null)}>
+            <Button variant="ghost" size="sm" onClick={() => onChange(null)} className="self-end sm:self-auto">
               <X className="mr-1 h-4 w-4" /> Remove
             </Button>
           </CardHeader>
@@ -151,10 +190,10 @@ export function UploadStep({ value, onChange, onBack, onNext, collectionName }: 
             </div>
             <div className="max-h-80 overflow-auto rounded-md border">
               <Table>
-                <TableHeader className="sticky top-0 bg-muted/50">
+                <TableHeader className="sticky top-0 bg-muted/50 backdrop-blur">
                   <TableRow>
                     {value.columns.map((c) => (
-                      <TableHead key={c} className="font-mono text-xs whitespace-nowrap">
+                      <TableHead key={c} className="whitespace-nowrap font-mono text-xs">
                         {c}
                       </TableHead>
                     ))}
@@ -164,9 +203,9 @@ export function UploadStep({ value, onChange, onBack, onNext, collectionName }: 
                   {value.rows.slice(0, 10).map((row, i) => (
                     <TableRow key={i}>
                       {value.columns.map((c) => (
-                        <TableCell key={c} className="font-mono text-xs whitespace-nowrap max-w-[200px] truncate">
+                        <TableCell key={c} className="max-w-[200px] truncate whitespace-nowrap font-mono text-xs">
                           {row[c] === null || row[c] === undefined || row[c] === ""
-                            ? <span className="text-muted-foreground italic">—</span>
+                            ? <span className="italic text-muted-foreground">—</span>
                             : String(row[c])}
                         </TableCell>
                       ))}
@@ -180,11 +219,11 @@ export function UploadStep({ value, onChange, onBack, onNext, collectionName }: 
         </Card>
       )}
 
-      <div className="flex justify-between">
-        <Button variant="ghost" onClick={onBack}>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+        <Button variant="ghost" onClick={onBack} className="sm:w-auto">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back
         </Button>
-        <Button onClick={onNext} disabled={!value}>
+        <Button onClick={onNext} disabled={!value} variant="accent" size="lg" className="sm:w-auto">
           Continue to mapping <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </div>
