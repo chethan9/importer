@@ -13,6 +13,8 @@ import {
   XCircle,
   Undo2,
   AlertTriangle,
+  PlayCircle,
+  RefreshCw,
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -43,9 +45,11 @@ type ImportRow = Awaited<ReturnType<typeof fetchImports>>[number];
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onResumeRequest?: (importRow: ImportRow) => void;
+  onRetryFailed?: (importRow: ImportRow) => void;
 };
 
-export function HistorySheet({ open, onOpenChange }: Props) {
+export function HistorySheet({ open, onOpenChange, onResumeRequest, onRetryFailed }: Props) {
   const { db, config, connected } = useFirebase();
   const { toast } = useToast();
   const [imports, setImports] = useState<ImportRow[]>([]);
@@ -174,9 +178,13 @@ export function HistorySheet({ open, onOpenChange }: Props) {
             {!loading &&
               imports.map((imp) => {
                 const isReverted = imp.status === "reverted";
+                const isPaused = imp.status === "paused";
                 const isReverting = revertingId === imp.id;
-                const canRevert = imp.success_count > 0 && !isReverted && imp.status !== "running" && imp.status !== "reverting";
+                const canRevert = imp.success_count > 0 && !isReverted && imp.status !== "running" && imp.status !== "reverting" && imp.status !== "paused";
+                const canResume = isPaused && !!onResumeRequest;
+                const canRetry = imp.status === "completed" && imp.error_count > 0 && !!onRetryFailed;
                 const projectMatch = config?.projectId === imp.project_id;
+                const lastRow = (imp as unknown as { last_processed_row?: number }).last_processed_row ?? 0;
 
                 return (
                   <Card key={imp.id} className={isReverted ? "opacity-70" : ""}>
@@ -210,11 +218,42 @@ export function HistorySheet({ open, onOpenChange }: Props) {
                         <span className="text-muted-foreground">of {imp.total_rows}</span>
                       </div>
 
+                      {isPaused && lastRow > 0 && (
+                        <div className="rounded border border-primary/30 bg-primary/5 p-2 text-xs">
+                          <span className="font-medium text-primary">Paused at row {lastRow} of {imp.total_rows}</span>
+                          <span className="text-muted-foreground"> · Re-upload the same file to resume</span>
+                        </div>
+                      )}
+
                       {isReverting && (
                         <div className="text-xs text-muted-foreground">Reverting… {revertProgress}%</div>
                       )}
 
-                      <div className="flex items-center justify-end pt-1">
+                      <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                        {canResume && (
+                          <Button
+                            variant="accent"
+                            size="sm"
+                            onClick={() => {
+                              onOpenChange(false);
+                              onResumeRequest?.(imp);
+                            }}
+                          >
+                            <PlayCircle className="mr-1.5 h-3.5 w-3.5" /> Resume
+                          </Button>
+                        )}
+                        {canRetry && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              onOpenChange(false);
+                              onRetryFailed?.(imp);
+                            }}
+                          >
+                            <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Retry {imp.error_count} failed
+                          </Button>
+                        )}
                         <Button
                           variant={canRevert ? "outline" : "ghost"}
                           size="sm"
@@ -271,6 +310,7 @@ function StatusBadge({ status }: { status: string }) {
     running: { label: "Running", className: "bg-primary/10 text-primary" },
     completed: { label: "Completed", className: "bg-accent/10 text-accent" },
     failed: { label: "Failed", className: "bg-destructive/10 text-destructive" },
+    paused: { label: "Paused", className: "bg-primary/20 text-primary" },
     reverting: { label: "Reverting", className: "bg-primary/10 text-primary" },
     reverted: { label: "Reverted", className: "bg-muted text-muted-foreground" },
   };
