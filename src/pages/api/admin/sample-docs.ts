@@ -1,18 +1,18 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { withAdmin, type ServiceAccount } from "@/lib/firebaseAdmin";
+import { withAdmin, type ServiceAccountJson } from "@/lib/firebaseAdmin";
 
 export const config = { api: { bodyParser: { sizeLimit: "2mb" } } };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   const { serviceAccount, collection, limit = 2 } = req.body as {
-    serviceAccount?: ServiceAccount;
+    serviceAccount?: ServiceAccountJson;
     collection?: string;
     limit?: number;
   };
   if (!serviceAccount || !collection) return res.status(400).json({ error: "serviceAccount and collection required" });
   try {
-    const docs = await withAdmin(serviceAccount, async (app, db) => {
+    const docs = await withAdmin(serviceAccount, async (db) => {
       const snap = await db.collection(collection).limit(Math.min(5, limit)).get();
       return snap.docs.map((d) => serializeForJson(d.data()));
     });
