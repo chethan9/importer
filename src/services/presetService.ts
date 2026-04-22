@@ -60,7 +60,13 @@ export async function updatePreset(id: string, patch: {
   docIdStrategy?: DocIdStrategyJson;
   mappingTree?: FieldNode[];
 }): Promise<MappingPreset> {
-  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const updates: {
+    name?: string;
+    mode?: string;
+    doc_id_strategy?: DocIdStrategyJson;
+    mapping_tree?: FieldNode[];
+    updated_at?: string;
+  } = { updated_at: new Date().toISOString() };
   if (patch.name !== undefined) updates.name = patch.name;
   if (patch.mode !== undefined) updates.mode = patch.mode;
   if (patch.docIdStrategy !== undefined) updates.doc_id_strategy = patch.docIdStrategy;
