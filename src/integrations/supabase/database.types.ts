@@ -1,4 +1,4 @@
- 
+/* eslint-disable @typescript-eslint/no-empty-object-type */
 export type Json =
   | string
   | number
@@ -98,6 +98,45 @@ export type Database = {
           status?: string
           success_count?: number
           total_rows?: number
+        }
+        Relationships: []
+      }
+      mapping_presets: {
+        Row: {
+          collection_name: string
+          created_at: string
+          doc_id_strategy: Json
+          id: string
+          mapping_tree: Json
+          mode: string
+          name: string
+          owner_key: string
+          project_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          collection_name: string
+          created_at?: string
+          doc_id_strategy: Json
+          id?: string
+          mapping_tree: Json
+          mode?: string
+          name: string
+          owner_key: string
+          project_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          collection_name?: string
+          created_at?: string
+          doc_id_strategy?: Json
+          id?: string
+          mapping_tree?: Json
+          mode?: string
+          name?: string
+          owner_key?: string
+          project_id?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
