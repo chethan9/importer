@@ -1,12 +1,284 @@
 import { useEffect, useRef, useState } from "react";
 import { FirebaseError } from "firebase/app";
-i
-...
-  </Card>
+import { Loader2, Link2, AlertCircle, KeyRound, Shield, Globe, CheckCircle2, Upload as UploadIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { useFirebase, loadServiceAccount, saveServiceAccount } from "@/contexts/FirebaseContext";
+import { type FirebaseConfig, loadLastConfig, validateConfig } from "@/lib/firebase";
+import type { ServiceAccount } from "@/services/adminFirestoreService";
+
+const FIELDS: Array<{ key: keyof FirebaseConfig; label: string; placeholder: string; required: boolean }> = [
+  { key: "apiKey", label: "API Key", placeholder: "AIzaSy…", required: true },
+  { key: "authDomain", label: "Auth Domain", placeholder: "my-app.firebaseapp.com", required: true },
+  { key: "projectId", label: "Project ID", placeholder: "my-app", required: true },
+  { key: "storageBucket", label: "Storage Bucket", placeholder: "my-app.appspot.com", required: false },
+  { key: "messagingSenderId", label: "Messaging Sender ID", placeholder: "123456789", required: false },
+  { key: "appId", label: "App ID", placeholder: "1:123:web:abc", required: false },
+];
+
+export function ConnectStep() {
+  const { connected, config: activeConfig, connectWeb, connectAdmin, connecting, error } = useFirebase();
+  const { toast } = useToast();
+  const [jsonText, setJsonText] = useState("");
+  const [fieldsForm, setFieldsForm] = useState<FirebaseConfig>({
+    apiKey: "",
+    authDomain: "",
+    projectId: "",
+    storageBucket: "",
+    messagingSenderId: "",
+    appId: "",
+  });
+  const [saJsonText, setSaJsonText] = useState("");
+  const saFileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const last = loadLastConfig();
+    if (last) setFieldsForm(last);
+    const sa = loadServiceAccount();
+    if (sa) setSaJsonText(JSON.stringify(sa, null, 2));
+  }, []);
+
+  function parseJsonPaste(text: string): FirebaseConfig | null {
+    try {
+      const normalized = text
+        .replace(/^[\s\S]*?=\s*/, "")
+        .replace(/;?\s*$/, "")
+        .replace(/([a-zA-Z0-9_]+)\s*:/g, '"$1":')
+        .replace(/'/g, '"');
+      const o = JSON.parse(normalized);
+      return o as FirebaseConfig;
+    } catch {
+      try {
+        return JSON.parse(text) as FirebaseConfig;
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  async function onConnectWeb(cfg: FirebaseConfig) {
+    const ok = validateConfig(cfg);
+    if (!ok.valid) {
+      toast({ title: "Missing fields", description: ok.missing.join(", "), variant: "destructive" });
+      return;
+    }
+    try {
+      await connectWeb(cfg);
+      toast({ title: "Connected", description: `Project ${cfg.projectId}` });
+    } catch (e) {
+      const msg = e instanceof FirebaseError ? e.message : e instanceof Error ? e.message : "Connect failed";
+      toast({ title: "Connection failed", description: msg, variant: "destructive" });
+    }
+  }
+
+  async function onConnectAdmin() {
+    let parsed: ServiceAccount | null = null;
+    try {
+      parsed = JSON.parse(saJsonText) as ServiceAccount;
+    } catch {
+      toast({ title: "Invalid JSON", description: "Paste the complete service account JSON.", variant: "destructive" });
+      return;
+    }
+    if (!parsed.project_id || !parsed.client_email || !parsed.private_key) {
+      toast({ title: "Incomplete service account", description: "Need project_id, client_email, private_key.", variant: "destructive" });
+      return;
+    }
+    try {
+      await connectAdmin(parsed);
+      saveServiceAccount(parsed);
+      toast({ title: "Connected (admin)", description: `Project ${parsed.project_id}` });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Connect failed";
+      toast({ title: "Connection failed", description: msg, variant: "destructive" });
+    }
+  }
+
+  function onSaFile(f: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === "string" ? reader.result : "";
+      setSaJsonText(text);
+    };
+    reader.readAsText(f);
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-3xl animate-fade-in-up space-y-6 px-4 pb-20 sm:px-6">
+      <div className="flex items-center gap-3">
+        <div
+          className="flex h-11 w-11 items-center justify-center rounded-full text-white shadow-md"
+          style={{ backgroundColor: "hsl(var(--step-connect))" }}
+        >
+          <KeyRound className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Connect to Firebase</h2>
+          <p className="text-sm text-muted-foreground">
+            Service account (recommended) or Web SDK config. Credentials stay in your browser.
+          </p>
+        </div>
       </div>
+
+      {connected && activeConfig && (
+        <Alert
+          className="border-[hsl(var(--step-connect))] bg-[hsl(var(--step-connect))]/5"
+        >
+          <CheckCircle2 className="h-4 w-4" style={{ color: "hsl(var(--step-connect))" }} />
+          <AlertDescription className="flex items-center justify-between gap-2">
+            <span>Connected to <code className="font-mono text-xs">{activeConfig.projectId}</code></span>
+            <Badge variant="outline" className="font-mono text-[10px]">ready</Badge>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <Card className="overflow-hidden shadow-sm">
+        <Tabs defaultValue="admin" className="w-full">
+          <div className="border-b bg-muted/30 px-2 pt-2">
+            <TabsList className="grid w-full grid-cols-2 bg-transparent">
+              <TabsTrigger value="admin" className="gap-1.5 data-[state=active]:bg-background">
+                <Shield className="h-3.5 w-3.5" /> Service account
+              </TabsTrigger>
+              <TabsTrigger value="web" className="gap-1.5 data-[state=active]:bg-background">
+                <Globe className="h-3.5 w-3.5" /> Web SDK
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          <TabsContent value="admin" className="mt-0">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Service account JSON</CardTitle>
+              <CardDescription>
+                Paste or upload the JSON from Firebase Console &rarr; Project Settings &rarr; Service accounts.
+                Private keys stay in your browser + this tab only.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <Label htmlFor="sa-json" className="text-xs text-muted-foreground">
+                    Paste JSON
+                  </Label>
+                  <input
+                    ref={saFileRef}
+                    type="file"
+                    accept=".json,application/json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) onSaFile(f);
+                    }}
+                  />
+                  <Button variant="ghost" size="sm" onClick={() => saFileRef.current?.click()} className="h-7">
+                    <UploadIcon className="mr-1.5 h-3 w-3" /> Upload file
+                  </Button>
+                </div>
+                <Textarea
+                  id="sa-json"
+                  value={saJsonText}
+                  onChange={(e) => setSaJsonText(e.target.value)}
+                  placeholder='{"type":"service_account","project_id":"…","private_key":"…"}'
+                  className="min-h-[140px] font-mono text-[11px]"
+                />
+              </div>
+              <Button
+                onClick={onConnectAdmin}
+                disabled={connecting || !saJsonText.trim()}
+                size="lg"
+                className="w-full text-white"
+                style={{ backgroundColor: "hsl(var(--step-connect))" }}
+              >
+                {connecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}
+                Connect with service account
+              </Button>
+            </CardContent>
+          </TabsContent>
+
+          <TabsContent value="web" className="mt-0">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Web SDK configuration</CardTitle>
+              <CardDescription>
+                Paste the <code className="rounded bg-muted px-1 font-mono text-[11px]">firebaseConfig</code> object,
+                or fill fields individually. Writes require open security rules.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Tabs defaultValue="paste" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="paste">Paste JSON</TabsTrigger>
+                  <TabsTrigger value="fields">Fields</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="paste" className="mt-3 space-y-3">
+                  <Textarea
+                    value={jsonText}
+                    onChange={(e) => setJsonText(e.target.value)}
+                    placeholder={`{\n  apiKey: "…",\n  authDomain: "…",\n  projectId: "…"\n}`}
+                    className="min-h-[140px] font-mono text-[11px]"
+                  />
+                  <Button
+                    onClick={() => {
+                      const parsed = parseJsonPaste(jsonText);
+                      if (!parsed) {
+                        toast({ title: "Could not parse JSON", variant: "destructive" });
+                        return;
+                      }
+                      setFieldsForm(parsed);
+                      void onConnectWeb(parsed);
+                    }}
+                    disabled={connecting || !jsonText.trim()}
+                    className="w-full"
+                  >
+                    {connecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}
+                    Parse &amp; connect
+                  </Button>
+                </TabsContent>
+
+                <TabsContent value="fields" className="mt-3 space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {FIELDS.map((f) => (
+                      <div key={f.key} className={f.key === "apiKey" ? "sm:col-span-2" : ""}>
+                        <Label htmlFor={f.key} className="text-xs">
+                          {f.label}
+                          {f.required && <span className="text-destructive"> *</span>}
+                        </Label>
+                        <Input
+                          id={f.key}
+                          value={fieldsForm[f.key] ?? ""}
+                          onChange={(e) => setFieldsForm((v) => ({ ...v, [f.key]: e.target.value }))}
+                          placeholder={f.placeholder}
+                          className="mt-1 font-mono text-xs"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    onClick={() => void onConnectWeb(fieldsForm)}
+                    disabled={connecting}
+                    className="w-full"
+                  >
+                    {connecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}
+                    Connect with fields
+                  </Button>
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </TabsContent>
+        </Tabs>
+      </Card>
+
+      {error && (
+        <Alert variant="destructive" className="animate-error-shake">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 }
-
-
-[Tool result trimmed: kept first 100 chars and last 100 chars of 10082 chars.]
