@@ -8,6 +8,7 @@ import {
   AlertCircle,
   FileCode2,
   Layers,
+  FileDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,8 @@ import { cn } from "@/lib/utils";
 import { useFirebase, type CollectionInfo } from "@/contexts/FirebaseContext";
 import { useToast } from "@/hooks/use-toast";
 import type { FirestoreFieldType } from "@/lib/firebase";
+import { downloadCsvTemplate } from "@/lib/csvTemplate";
+import { collection as fsCollection, getDocs, query, limit as fsLimit } from "firebase/firestore";
 
 const TYPE_COLORS: Record<FirestoreFieldType, string> = {
   string: "bg-blue-500/10 text-blue-700 ring-blue-500/20",
@@ -41,12 +44,44 @@ const TYPE_COLORS: Record<FirestoreFieldType, string> = {
 };
 
 export function BrowseStep() {
-  const { collections, addCollection, removeCollection, selectCollection, selectedCollection, setStep } =
+  const { collections, addCollection, removeCollection, selectCollection, selectedCollection, setStep, db, authMode, serviceAccount } =
     useFirebase();
   const { toast } = useToast();
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [templateLoading, setTemplateLoading] = useState<string | null>(null);
+
+  const handleDownloadTemplate = async (info: CollectionInfo) => {
+    setTemplateLoading(info.name);
+    try {
+      let samples: Record<string, unknown>[] = [];
+      if (authMode === "admin" && serviceAccount) {
+        const res = await fetch("/api/admin/sample-docs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serviceAccount, collection: info.name, limit: 2 }),
+        });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error || "Failed to fetch samples");
+        samples = (j.docs as Record<string, unknown>[]) ?? [];
+      } else if (db) {
+        const snap = await getDocs(query(fsCollection(db, info.name), fsLimit(2)));
+        samples = snap.docs.map((d) => d.data() as Record<string, unknown>);
+      }
+      downloadCsvTemplate(info.name, samples, info.fields);
+      toast({
+        title: "Template downloaded",
+        description: samples.length > 0
+          ? `${info.name}_template.csv with ${samples.length} sample row${samples.length === 1 ? "" : "s"}`
+          : `${info.name}_template.csv with placeholder row (empty collection)`,
+      });
+    } catch (err) {
+      toast({ title: "Template failed", description: err instanceof Error ? err.message : String(err), variant: "destructive" });
+    } finally {
+      setTemplateLoading(null);
+    }
+  };
 
   const handleAdd = async () => {
     setError(null);
@@ -135,6 +170,8 @@ export function BrowseStep() {
                   selected={selectedCollection === c.name}
                   onSelect={() => selectCollection(c.name)}
                   onRemove={() => removeCollection(c.name)}
+                  onDownloadTemplate={() => handleDownloadTemplate(c)}
+                  templateLoading={templateLoading === c.name}
                 />
               ))}
             </div>
@@ -218,11 +255,15 @@ function CollectionCard({
   selected,
   onSelect,
   onRemove,
+  onDownloadTemplate,
+  templateLoading,
 }: {
   info: CollectionInfo;
   selected: boolean;
   onSelect: () => void;
   onRemove: () => void;
+  onDownloadTemplate: () => void;
+  templateLoading: boolean;
 }) {
   return (
     <button
@@ -242,17 +283,25 @@ function CollectionCard({
             {info.docCount} docs · {info.fields.length} fields
           </div>
         </div>
-        <span
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          className="rounded p-1 text-muted-foreground opacity-0 transition hover:bg-muted hover:text-destructive group-hover:opacity-100"
-          role="button"
-          aria-label="Remove"
-        >
-          <X className="h-3.5 w-3.5" />
-        </span>
+        <div className="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
+          <span
+            onClick={(e) => { e.stopPropagation(); if (!templateLoading) onDownloadTemplate(); }}
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-accent"
+            role="button"
+            aria-label="Download CSV template"
+            title="Download CSV template"
+          >
+            {templateLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileDown className="h-3.5 w-3.5" />}
+          </span>
+          <span
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
+            role="button"
+            aria-label="Remove"
+          >
+            <X className="h-3.5 w-3.5" />
+          </span>
+        </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-1">
         {info.fields.slice(0, 6).map((f) => (
