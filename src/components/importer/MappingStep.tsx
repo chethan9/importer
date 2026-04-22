@@ -72,6 +72,7 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
   const [saveName, setSaveName] = useState("");
   const [saving, setSaving] = useState(false);
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
+  const [focusId, setFocusId] = useState<string | null>(null);
   const treeRef = useRef(tree);
   treeRef.current = tree;
 
@@ -157,16 +158,24 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
     });
   }
   function onAddRoot() {
-    setTree((t) => appendRoot(t, makeLeaf("newField")));
+    const n = makeLeaf("newField");
+    setTree((t) => appendRoot(t, n));
+    setFocusId(n.id);
   }
   function onAddRootMap() {
-    setTree((t) => appendRoot(t, makeMap("newMap", [])));
+    const n = makeMap("newMap", []);
+    setTree((t) => appendRoot(t, n));
+    setFocusId(n.id);
   }
   function onAddChild(parentId: string) {
-    setTree((t) => addChildToMap(t, parentId, makeLeaf("newField")));
+    const n = makeLeaf("newField");
+    setTree((t) => addChildToMap(t, parentId, n));
+    setFocusId(n.id);
   }
   function onAddChildMap(parentId: string) {
-    setTree((t) => addChildToMap(t, parentId, makeMap("newMap", [])));
+    const n = makeMap("newMap", []);
+    setTree((t) => addChildToMap(t, parentId, n));
+    setFocusId(n.id);
   }
   function onDropColumn(leafId: string, column: string) {
     const detected = inferredTypes[column] ?? "string";
@@ -351,170 +360,174 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <CardTitle className="text-base">Field bindings</CardTitle>
-              <CardDescription>
-                {bound} of {total} fields mapped · {boundColumns.size} of {file.columns.length} CSV columns used
-                {unmappedCount > 0 && ` · ${unmappedCount} unmapped`}
-              </CardDescription>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" title="Saved mapping presets">
-                    <Bookmark className="mr-1.5 h-3.5 w-3.5" />
-                    {activePresetId && presets.find((p) => p.id === activePresetId)?.name
-                      ? `Preset: ${presets.find((p) => p.id === activePresetId)?.name}`
-                      : `Presets${presets.length > 0 ? ` (${presets.length})` : ""}`}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80">
-                  <DropdownMenuLabel className="text-xs">Mapping presets · {collection.name}</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => { setSaveName(""); setSaveOpen(true); }} className="text-xs">
-                    <BookmarkPlus className="mr-2 h-3.5 w-3.5" /> Save current mapping as preset…
-                  </DropdownMenuItem>
-                  {activePresetId && (
-                    <DropdownMenuItem onClick={() => void onUpdateActivePreset()} disabled={saving} className="text-xs">
-                      <Bookmark className="mr-2 h-3.5 w-3.5" /> Overwrite active preset with current mapping
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-[10px] text-muted-foreground">
-                    {presetsLoading ? "Loading…" : presets.length === 0 ? "No presets yet" : "Load a preset"}
-                  </DropdownMenuLabel>
-                  {presets.map((p) => (
-                    <DropdownMenuItem
-                      key={p.id}
-                      className="flex items-start justify-between gap-2 text-xs"
-                      onSelect={(e) => { e.preventDefault(); }}
-                    >
-                      <button
-                        type="button"
-                        className="flex-1 min-w-0 text-left"
-                        onClick={() => onLoadPreset(p)}
-                      >
-                        <div className="truncate font-medium">{p.name}</div>
-                        <div className="text-[10px] text-muted-foreground">
-                          {p.mode} · {p.docIdStrategy.kind === "auto" ? "auto ID" : `ID: ${p.docIdStrategy.column}`} · {new Date(p.updatedAt).toLocaleDateString()}
-                        </div>
-                      </button>
-                      <button
-                        type="button"
-                        className="text-muted-foreground hover:text-destructive"
-                        onClick={(e) => { e.stopPropagation(); void onDeletePreset(p); }}
-                        title="Delete preset"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              {deletionHistory.length > 0 && (
+      <div className="grid gap-4 lg:grid-cols-[3fr_1fr]">
+        <Card>
+          <CardHeader>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle className="text-base">Field bindings</CardTitle>
+                <CardDescription>
+                  {bound} of {total} fields mapped · {boundColumns.size} of {file.columns.length} CSV columns used
+                  {unmappedCount > 0 && ` · ${unmappedCount} unmapped`}
+                </CardDescription>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" title="Restore a recently deleted field">
-                      <Undo2 className="mr-1.5 h-3.5 w-3.5" /> Restore ({deletionHistory.length})
+                    <Button variant="outline" size="sm" title="Saved mapping presets">
+                      <Bookmark className="mr-1.5 h-3.5 w-3.5" />
+                      {activePresetId && presets.find((p) => p.id === activePresetId)?.name
+                        ? `Preset: ${presets.find((p) => p.id === activePresetId)?.name}`
+                        : `Presets${presets.length > 0 ? ` (${presets.length})` : ""}`}
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-72">
-                    <DropdownMenuLabel className="text-xs">Recently deleted</DropdownMenuLabel>
+                  <DropdownMenuContent align="end" className="w-80">
+                    <DropdownMenuLabel className="text-xs">Mapping presets · {collection.name}</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    {deletionHistory.map((d) => (
+                    <DropdownMenuItem onClick={() => { setSaveName(""); setSaveOpen(true); }} className="text-xs">
+                      <BookmarkPlus className="mr-2 h-3.5 w-3.5" /> Save current mapping as preset…
+                    </DropdownMenuItem>
+                    {activePresetId && (
+                      <DropdownMenuItem onClick={() => void onUpdateActivePreset()} disabled={saving} className="text-xs">
+                        <Bookmark className="mr-2 h-3.5 w-3.5" /> Overwrite active preset with current mapping
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-[10px] text-muted-foreground">
+                      {presetsLoading ? "Loading…" : presets.length === 0 ? "No presets yet" : "Load a preset"}
+                    </DropdownMenuLabel>
+                    {presets.map((p) => (
                       <DropdownMenuItem
-                        key={d.deletedAt}
-                        onClick={() => restoreFromHistory(d.deletedAt)}
-                        className="flex items-center justify-between gap-3"
+                        key={p.id}
+                        className="flex items-start justify-between gap-2 text-xs"
+                        onSelect={(e) => { e.preventDefault(); }}
                       >
-                        <div className="min-w-0">
-                          <div className="truncate font-mono text-xs">{d.displayName}</div>
+                        <button
+                          type="button"
+                          className="flex-1 min-w-0 text-left"
+                          onClick={() => onLoadPreset(p)}
+                        >
+                          <div className="truncate font-medium">{p.name}</div>
                           <div className="text-[10px] text-muted-foreground">
-                            {d.node.kind === "map" ? "map" : (d.node as LeafNode).firestoreType}
-                            {d.parentId ? " · nested" : " · root"}
+                            {p.mode} · {p.docIdStrategy.kind === "auto" ? "auto ID" : `ID: ${p.docIdStrategy.column}`} · {new Date(p.updatedAt).toLocaleDateString()}
                           </div>
-                        </div>
-                        <History className="h-3 w-3 text-muted-foreground" />
+                        </button>
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-destructive"
+                          onClick={(e) => { e.stopPropagation(); void onDeletePreset(p); }}
+                          title="Delete preset"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
                       </DropdownMenuItem>
                     ))}
                   </DropdownMenuContent>
                 </DropdownMenu>
-              )}
-              <Button variant="outline" size="sm" onClick={onSmartDetect} title="Auto-detect Firestore type from sample values">
-                <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Smart detect types
-              </Button>
-              <Button variant="outline" size="sm" onClick={onAddRoot}>
-                <Plus className="mr-1.5 h-3.5 w-3.5" /> Field
-              </Button>
-              <Button variant="outline" size="sm" onClick={onAddRootMap}>
-                <Braces className="mr-1.5 h-3.5 w-3.5" /> Map
-              </Button>
+                {deletionHistory.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" title="Restore a recently deleted field">
+                        <Undo2 className="mr-1.5 h-3.5 w-3.5" /> Restore ({deletionHistory.length})
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-72">
+                      <DropdownMenuLabel className="text-xs">Recently deleted</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      {deletionHistory.map((d) => (
+                        <DropdownMenuItem
+                          key={d.deletedAt}
+                          onClick={() => restoreFromHistory(d.deletedAt)}
+                          className="flex items-center justify-between gap-3"
+                        >
+                          <div className="min-w-0">
+                            <div className="truncate font-mono text-xs">{d.displayName}</div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {d.node.kind === "map" ? "map" : (d.node as LeafNode).firestoreType}
+                              {d.parentId ? " · nested" : " · root"}
+                            </div>
+                          </div>
+                          <History className="h-3 w-3 text-muted-foreground" />
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+                <Button variant="outline" size="sm" onClick={onSmartDetect} title="Auto-detect Firestore type from sample values">
+                  <Wand2 className="mr-1.5 h-3.5 w-3.5" /> Smart detect types
+                </Button>
+                <Button variant="outline" size="sm" onClick={onAddRoot}>
+                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Field
+                </Button>
+                <Button variant="outline" size="sm" onClick={onAddRootMap}>
+                  <Braces className="mr-1.5 h-3.5 w-3.5" /> Map
+                </Button>
+              </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-[260px_1fr]">
-            <div className="rounded-lg border bg-muted/30 p-3">
-              <ColumnPalette
-                columns={file.columns}
-                inferredTypes={inferredTypes}
-                boundColumns={boundColumns}
-                sampleRow={file.rows[0] ?? {}}
-              />
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-[240px_1fr]">
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <ColumnPalette
+                  columns={file.columns}
+                  inferredTypes={inferredTypes}
+                  boundColumns={boundColumns}
+                  sampleRow={file.rows[0] ?? {}}
+                />
+              </div>
+              <div className="rounded-lg border bg-card p-2 font-mono">
+                {tree.length === 0 ? (
+                  <div className="rounded-md border border-dashed bg-muted/20 p-8 text-center text-sm text-muted-foreground">
+                    No fields yet. Use the buttons above to add fields or maps.
+                  </div>
+                ) : (
+                  <div className="space-y-0.5">
+                    {tree.map((node) => (
+                      <FieldTreeNode
+                        key={node.id}
+                        node={node}
+                        depth={0}
+                        sampleRow={file.rows[0] ?? {}}
+                        focusId={focusId}
+                        onFocusConsumed={() => setFocusId(null)}
+                        onNameChange={onNameChange}
+                        onLeafChange={onLeafChange}
+                        onConvertToMap={onConvertToMap}
+                        onConvertToLeaf={onConvertToLeaf}
+                        onRemove={onRemove}
+                        onAddChild={onAddChild}
+                        onAddChildMap={onAddChildMap}
+                        onDropColumn={onDropColumn}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="rounded-lg border bg-card p-2 font-mono">
-              {tree.length === 0 ? (
-                <div className="rounded-md border border-dashed bg-muted/20 p-8 text-center text-sm text-muted-foreground">
-                  No fields yet. Use the buttons above to add fields or maps.
-                </div>
-              ) : (
-                <div className="space-y-0.5">
-                  {tree.map((node) => (
-                    <FieldTreeNode
-                      key={node.id}
-                      node={node}
-                      depth={0}
-                      sampleRow={file.rows[0] ?? {}}
-                      onNameChange={onNameChange}
-                      onLeafChange={onLeafChange}
-                      onConvertToMap={onConvertToMap}
-                      onConvertToLeaf={onConvertToLeaf}
-                      onRemove={onRemove}
-                      onAddChild={onAddChild}
-                      onAddChildMap={onAddChildMap}
-                      onDropColumn={onDropColumn}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
 
-          {duplicates.length > 0 && (
-            <Alert variant="destructive" className="mt-4">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                Duplicate sibling field names: {duplicates.map((d) => <code key={d} className="mx-1 font-mono text-xs">{d}</code>)}
-              </AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
+            {duplicates.length > 0 && (
+              <Alert variant="destructive" className="mt-4">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  Duplicate sibling field names: {duplicates.map((d) => <code key={d} className="mx-1 font-mono text-xs">{d}</code>)}
+                </AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Document preview</CardTitle>
-          <CardDescription>
-            How the first row will look as a Firestore document · switch to other rows to spot-check
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <PreviewRowSwitcher file={file} tree={tree} db={db} docIdStrategy={docIdStrategy} />
-        </CardContent>
-      </Card>
+        <Card className="lg:sticky lg:top-4 lg:self-start">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Document preview</CardTitle>
+            <CardDescription>
+              First row as a Firestore doc · switch rows to spot-check
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PreviewRowSwitcher file={file} tree={tree} db={db} docIdStrategy={docIdStrategy} />
+          </CardContent>
+        </Card>
+      </div>
 
       <Card>
         <CardHeader className="pb-3">

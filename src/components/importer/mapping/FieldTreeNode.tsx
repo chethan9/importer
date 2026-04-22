@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronRight,
   ChevronDown,
@@ -27,6 +27,8 @@ type Props = {
   node: FieldNode;
   depth: number;
   sampleRow: Record<string, unknown>;
+  focusId?: string | null;
+  onFocusConsumed?: () => void;
   onNameChange: (id: string, name: string) => void;
   onLeafChange: (id: string, patch: Partial<Omit<LeafNode, "kind" | "id">>) => void;
   onConvertToMap: (id: string) => void;
@@ -44,8 +46,17 @@ export function FieldTreeNode(props: Props) {
 }
 
 function MapNodeRow(props: Props & { node: MapNode }) {
-  const { node, depth, onNameChange, onRemove, onAddChild, onAddChildMap, onConvertToLeaf } = props;
+  const { node, depth, focusId, onFocusConsumed, onNameChange, onRemove, onAddChild, onAddChildMap, onConvertToLeaf } = props;
   const [open, setOpen] = useState(true);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (focusId === node.id && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+      onFocusConsumed?.();
+    }
+  }, [focusId, node.id, onFocusConsumed]);
 
   return (
     <div className="group/map">
@@ -62,6 +73,7 @@ function MapNodeRow(props: Props & { node: MapNode }) {
         </button>
         <Braces className="h-3.5 w-3.5 text-muted-foreground" />
         <Input
+          ref={inputRef}
           value={node.name}
           onChange={(e) => onNameChange(node.id, e.target.value)}
           placeholder="mapField"
@@ -113,8 +125,17 @@ function MapNodeRow(props: Props & { node: MapNode }) {
 }
 
 function LeafNodeRow(props: Props & { node: LeafNode }) {
-  const { node, depth, sampleRow, onNameChange, onLeafChange, onRemove, onConvertToMap, onDropColumn } = props;
+  const { node, depth, sampleRow, focusId, onFocusConsumed, onNameChange, onLeafChange, onRemove, onConvertToMap, onDropColumn } = props;
   const [dragOver, setDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (focusId === node.id && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+      onFocusConsumed?.();
+    }
+  }, [focusId, node.id, onFocusConsumed]);
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -142,6 +163,7 @@ function LeafNodeRow(props: Props & { node: LeafNode }) {
     >
       {depth > 0 && <CornerDownRight className="h-3 w-3 text-muted-foreground/60" />}
       <Input
+        ref={inputRef}
         value={node.name}
         onChange={(e) => onNameChange(node.id, e.target.value)}
         placeholder="fieldName"
