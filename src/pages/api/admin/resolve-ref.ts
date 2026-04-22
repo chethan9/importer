@@ -4,13 +4,22 @@ import { withAdmin, resolveRefPath, type ServiceAccountJson } from "@/lib/fireba
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   try {
-    const { serviceAccount, targetCollection, matchField, matchValue } = req.body as {
+    const body = req.body as {
       serviceAccount: ServiceAccountJson;
-      targetCollection: string;
-      matchField: string;
-      matchValue: unknown;
+      targetCollection?: string;
+      collection?: string;
+      matchField?: string;
+      field?: string;
+      matchValue?: unknown;
+      value?: unknown;
     };
-    const path = await withAdmin(serviceAccount, (db) =>
+    const targetCollection = body.targetCollection ?? body.collection;
+    const matchField = body.matchField ?? body.field;
+    const matchValue = body.matchValue ?? body.value;
+    if (!targetCollection || !matchField) {
+      return res.status(400).json({ error: "collection and field required" });
+    }
+    const path = await withAdmin(body.serviceAccount, (db) =>
       resolveRefPath(db, targetCollection, matchField, matchValue),
     );
     return res.status(200).json({ path });
