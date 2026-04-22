@@ -26,7 +26,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useFirebase } from "@/contexts/FirebaseContext";
 import type { ParsedFile } from "./UploadStep";
 import type { MappingConfig } from "./MappingStep";
-import { buildRowData, collectRefQueryLookups, resolveRefQueries } from "@/lib/mappingTree";
+import { buildRowData, collectRefQueryLookups, resolveRefQueries, parseManualRefPath } from "@/lib/mappingTree";
 import {
   createImportRecord,
   logImportedDocs,
@@ -536,6 +536,20 @@ async function processBatchAdmin(
         }
         if (node.source.kind === "skip") continue;
         if (node.source.kind === "now") { target[name] = { __type: "serverTimestamp" }; continue; }
+        if (node.source.kind === "refManual") {
+          const src = node.source;
+          const parsed = parseManualRefPath(row[src.column], src.baseCollection);
+          if (parsed === null) {
+            if (src.onMissing === "error") rowErrs.push({ field: name, message: `Empty value in column "${src.column}"` });
+            continue;
+          }
+          if ("error" in parsed) {
+            if (src.onMissing === "error") rowErrs.push({ field: name, message: parsed.error });
+            continue;
+          }
+          target[name] = { __type: "ref", path: parsed.path };
+          continue;
+        }
         if (node.source.kind === "refQuery") {
           const src = node.source;
           const rawVal = src.matchSource.kind === "column" ? row[src.matchSource.column] : src.matchSource.value;

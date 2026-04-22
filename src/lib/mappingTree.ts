@@ -10,13 +10,21 @@ export type RefQuerySource = {
   onMissing: "error" | "null";
 };
 
+export type RefManualSource = {
+  kind: "refManual";
+  column: string;
+  baseCollection?: string;
+  onMissing: "error" | "null";
+};
+
 export type Source =
   | { kind: "column"; column: string }
   | { kind: "fixed"; value: string }
   | { kind: "autoIncrement"; start: number; step: number }
   | { kind: "now" }
   | { kind: "skip" }
-  | RefQuerySource;
+  | RefQuerySource
+  | RefManualSource;
 
 export type LeafNode = {
   kind: "leaf";
@@ -183,6 +191,22 @@ export function buildRowData(
     if (node.source.kind === "skip") continue;
     if (node.source.kind === "now") { data[name] = serverTimestamp(); continue; }
 
+    if (node.source.kind === "refManual") {
+      const src = node.source;
+      const raw = row[src.column];
+      const parsed = parseManualRefPath(raw, src.baseCollection);
+      if (parsed === null) {
+        if (src.onMissing === "error") errors.push({ field: path, message: `Empty value in column "${src.column}"` });
+        continue;
+      }
+      if ("error" in parsed) {
+        if (src.onMissing === "error") errors.push({ field: path, message: parsed.error });
+        continue;
+      }
+      data[name] = fsDoc(db, parsed.segments[0], ...parsed.segments.slice(1));
+      continue;
+    }
+
     if (node.source.kind === "refQuery") {
       const src = node.source;
       if (!src.collection.trim() || !src.matchField.trim()) {
@@ -214,12 +238,30 @@ export function buildRowData(
   return { data, errors };
 }
 
+export function parseManualRefPath(rawValue: unknown, baseCollection?: string): { path: string; segments: string[] } | { error: string } | null {
+  if (rawValue === null || rawValue === undefined) return null;
+  const str = String(rawValue).trim();
+  if (!str) return null;
+  const cleaned = str.startsWith("/") ? str.slice(1) : str;
+  if (cleaned.includes("/")) {
+    const segments = cleaned.split("/").filter(Boolean);
+    if (segments.length < 2 || segments.length % 2 !== 0) {
+      return { error: `Invalid Firestore doc path "${str}" — must be collection/doc[/collection/doc…]` };
+    }
+    return { path: segments.join("/"), segments };
+  }
+  const base = baseCollection?.trim();
+  if (!base) return { error: `Value "${str}" is not a full path and no base collection is set` };
+  return { path: `${base}/${cleaned}`, segments: [base, cleaned] };
+}
+
 export function collectBoundColumns(nodes: FieldNode[]): Set<string> {
   const set = new Set<string>();
   const walk = (ns: FieldNode[]) => {
     ns.forEach((n) => {
       if (n.kind === "map") walk(n.children);
       else if (n.source.kind === "column" && n.source.column) set.add(n.source.column);
+      else if (n.source.kind === "refManual" && n.source.column) set.add(n.source.column);
       else if (n.source.kind === "refQuery" && n.source.matchSource.kind === "column" && n.source.matchSource.column) {
         set.add(n.source.matchSource.column);
       }
