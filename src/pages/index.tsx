@@ -106,31 +106,33 @@ export default function Home() {
       <div className="min-h-screen bg-background">
         <AppHeader onOpenHistory={() => setHistoryOpen(true)} />
         <div className="mx-auto max-w-5xl px-4 pb-16 pt-6">
-          <Stepper current={step} />
+          <Stepper current={step} connected={connected} />
           <div className="mt-8">
             {step === 1 && <ConnectStep />}
             {step === 2 && <BrowseStep />}
             {step === 3 && (
               <UploadStep
-                onNext={(f) => {
+                value={file}
+                onChange={(f) => {
                   setFile(f);
                   setResumeInfo(null);
-                  setStep(4);
                 }}
                 onBack={() => setStep(2)}
+                onNext={() => setStep(4)}
+                collectionName={collectionInfo?.name ?? ""}
               />
             )}
             {step === 4 && file && collectionInfo && (
               <MappingStep
                 file={file}
                 collection={collectionInfo}
-                initial={mapping ?? undefined}
-                onBack={() => setStep(3)}
-                onNext={(m) => {
+                value={mapping}
+                onChange={(m) => {
                   setMapping(m);
                   setResumeInfo(null);
-                  setStep(5);
                 }}
+                onBack={() => setStep(3)}
+                onNext={() => setStep(5)}
               />
             )}
             {step === 5 && file && mapping && collectionInfo && connected && (
