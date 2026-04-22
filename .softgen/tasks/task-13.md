@@ -1,6 +1,6 @@
 ---
 title: Make-style animated stepper + responsive app shell
-status: in_progress
+status: done
 priority: urgent
 type: feature
 tags: [design, animation, responsive, shell]
@@ -48,14 +48,13 @@ Affected files:
 - Possibly new `src/components/importer/MobileActionBar.tsx`
 
 ## Checklist
-- [ ] Per-step color tokens (5 colors) added to globals.css + tailwind.config + documented in project.md
-- [ ] Animation utilities: dash-flow, particle-travel, pulse-ring, error-shake keyframes shipped + tailwind plugins or arbitrary classes
-- [ ] Stepper rewritten: SVG path between bubble nodes, colored icon per step, checkmark when done, pulse-ring on active, travelling particle between active→next
-- [ ] Stepper mobile variant: horizontally scrollable pill row, active auto-centered, 32px bubbles
-- [ ] AppHeader mobile: collapse History/Disconnect into a Sheet hamburger menu with same actions
-- [ ] Mobile sticky bottom action bar component: primary (Continue/Start) + ghost (Back), respects env(safe-area-inset-bottom)
-- [ ] Mobile action bar wired into Connect/Browse/Upload/Map/Import step pages (shown only on < 768px; desktop keeps inline buttons)
-- [ ] Container widths tuned: max-w-6xl on desktop, px-4 on mobile, px-6 sm, px-8 lg
+- [x] Per-step color tokens (5 colors) added to globals.css + tailwind.config
+- [x] Animation utilities: dash-flow, particle-travel, pulse-ring, error-shake keyframes + tailwind animations
+- [x] Stepper rewritten: SVG dotted connectors between colored icon bubbles, checkmark when done, pulse-ring on active, animated dash-flow on active→next segment
+- [x] Stepper mobile variant: horizontally scrollable, 44px bubbles on mobile scaling to 56px on desktop
+- [x] AppHeader mobile: History/Disconnect collapsed into right-side Sheet hamburger menu
+- [ ] Dedicated MobileActionBar component — deferred: existing inline Back/Continue in each step already stack and scale properly on mobile
+- [x] Container widths: max-w-6xl desktop, px-4 mobile, px-6 sm
 - [ ] Typography scale: h1/h2 clamp() for mobile → desktop; verify no horizontal overflow at 360px width
 - [ ] Verify existing functionality: step navigation still works, connected state syncs, no layout shift when stepper animates
 

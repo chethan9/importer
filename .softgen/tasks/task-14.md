@@ -1,6 +1,6 @@
 ---
 title: Connect / Browse / Upload responsive redesign
-status: todo
+status: in_progress
 priority: high
 type: feature
 tags: [responsive, redesign, steps]
