@@ -16,11 +16,11 @@ type ImportRow = {
   id: string;
   project_id: string;
   total_rows: number;
-  last_processed_row?: number;
+  last_processed_row?: number | null;
   success_count: number;
   error_count: number;
   file_signature?: string | null;
-  failed_rows?: FailedRowRecord[] | null;
+  failed_rows?: unknown;
   status: string;
 };
 
@@ -66,7 +66,9 @@ export default function Home() {
         startRow: importRow.last_processed_row ?? 0,
         priorSuccess: importRow.success_count ?? 0,
         priorErrors: importRow.error_count ?? 0,
-        priorFailedRows: (importRow.failed_rows as FailedRowRecord[]) ?? [],
+        priorFailedRows: Array.isArray(importRow.failed_rows)
+          ? (importRow.failed_rows as FailedRowRecord[])
+          : [],
       });
       setStep(5);
     },
