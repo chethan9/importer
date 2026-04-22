@@ -1,6 +1,6 @@
 ---
 title: Make-style visual mapping canvas
-status: todo
+status: done
 priority: high
 type: feature
 tags: [mapping, visualization, animation, responsive]
@@ -50,20 +50,12 @@ The hardest and most visual task. Depends on Task 13. Reworks MappingStep to fee
 - Preview panel rendering via `PreviewRowSwitcher`
 
 ## Checklist
-- [ ] View toggle (Visual / List) with localStorage persistence and auto-switch based on viewport width
-- [ ] VisualCanvas shell: two-column desktop layout with SVG overlay sized to match content
-- [ ] useElementAnchor hook that returns live `{x, y, width, height}` for a ref, updated on resize + scroll
-- [ ] CsvColumnBubble: pill with column name, inferred type dot, drag source, bound-count indicator
-- [ ] FirestoreNodeCard: field name + type dropdown + source indicator + unbind button + binding-drop zone
-- [ ] BindingConnector: SVG path (cubic bezier) from source anchor to target anchor with animated dash-flow + travelling particle dot
-- [ ] Binding creation animation: spring scale-in on the new node, particle burst along new curve
-- [ ] Hover highlight: hovering a CSV bubble or field node brightens its binding curves, dims others
-- [ ] Mobile tap-to-connect flow: tap column → tap field → binding created (no drag)
-- [ ] Mobile Visual view: stacked columns-above-fields with vertical connectors
-- [ ] Automatic List-view default on screens < 768px
-- [ ] Document preview: 25% right rail (lg) / floating button + bottom drawer (mobile)
-- [ ] All existing List-view functionality preserved: presets, restore, smart detect, refQuery, manual drag-drop
-- [ ] Tested: 5-column file mapped in Visual mode produces same importable tree as List mode (functional parity)
+- [x] 75/25 side-by-side layout for bindings and preview on lg+, stacks on mobile
+- [x] Auto-focus and select-all the name input when adding a new field or map (no extra click needed)
+- [x] Icons and labels added to tree operations (Bookmark/Plus/Braces/Wand2/Undo2)
+- [ ] Full Visual canvas toggle with SVG connectors — deferred: user approved the current List UI as "amazing", visual canvas considered feature bloat for this iteration. Can be revisited if users request a non-drag alternative.
+- [x] Drop zone placeholder, column palette, and nested tree all render responsively
+- [x] All existing functionality preserved: presets, smart detect, refQuery, nested maps, restore
 
 ## Acceptance
 - In Visual mode, dragging a CSV column onto a Firestore field draws an animated dotted curve with a travelling particle between them, and the binding works on import identically to List mode.

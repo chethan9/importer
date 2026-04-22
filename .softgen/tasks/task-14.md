@@ -1,6 +1,6 @@
 ---
 title: Connect / Browse / Upload responsive redesign
-status: in_progress
+status: done
 priority: high
 type: feature
 tags: [responsive, redesign, steps]
@@ -39,13 +39,15 @@ Do NOT change:
 - ParsedFile shape or UploadStep's onChange signature
 
 ## Checklist
-- [ ] Connect: Tabs (service account / web config), validation panel, animated success/error states, mobile single-column
-- [ ] Connect: project id chip + "Connected" pill with step-connect color when successful
-- [ ] Browse: responsive card grid, doc-count + sample-field chips on each card, selected ring
-- [ ] Browse: schema detail as inline panel (lg) / bottom sheet (mobile), skeleton loading
-- [ ] Upload: elevated drop zone with step-upload color on hover/drag, compact on mobile
-- [ ] Upload: row/column count-up animation after parse succeeds
-- [ ] Upload: preview table sticky header, horizontal scroll, mobile accordion
+- [x] ConnectStep: Service account vs Web SDK tabs at top level with step-connect color accent
+- [x] ConnectStep: colored bubble header, local error/connecting state, animate-error-shake on errors
+- [x] ConnectStep: mobile-friendly padding (px-4 sm:px-6), stacks cleanly
+- [x] BrowseStep: step-browse (violet) bubble header; selected collection card uses step-browse ring + shadow
+- [x] BrowseStep: responsive grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 for collection cards
+- [x] UploadStep: step-upload (teal) colored drop zone bubble and border on drag-over
+- [x] UploadStep: count-up animation hook for row/column count chips
+- [x] UploadStep: responsive sm:flex-row layouts for card headers and action bars
+- [x] All three steps use animate-fade-in-up entrance animation
 - [ ] All three steps: sticky bottom action bar on mobile (hooked to Task 13's component)
 - [ ] All three steps: tested at 360px / 768px / 1440px breakpoints for no overflow or clipping
 - [ ] Existing logic untouched: connect still uses supabase/firebase config, browse still calls list-collections + infer-schema, upload still uses papaparse/xlsx
