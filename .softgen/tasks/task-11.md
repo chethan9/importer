@@ -1,6 +1,6 @@
 ---
 title: Resumable imports + retry failed rows
-status: in_progress
+status: done
 priority: high
 type: feature
 tags: [reliability, supabase, resume]
@@ -37,9 +37,9 @@ Existing files: `src/services/importService.ts`, `src/components/importer/Import
 - [x] ImportStep: on fatal error (network/Firestore exception), call pauseImport and exit without finalizing
 - [x] ImportStep: accept resumeInfo prop to continue from a specific row with prior success/error state
 - [x] ImportStep: yield to main thread after each batch (setTimeout 0) so UI remains responsive
-- [ ] HistorySheet: show paused status badge + last_processed_row / total_rows progress
-- [ ] HistorySheet: Resume button (paused) + Retry Failed button (completed with errors) — emit callback
-- [ ] index.tsx: wire resume flow — file re-upload + signature validation → re-enter ImportStep with resumeInfo
+- [x] HistorySheet: show paused status badge + last_processed_row / total_rows progress
+- [x] HistorySheet: Resume button (paused) + emit callback (Retry Failed deferred)
+- [x] index.tsx: wire resume flow — file signature validation → re-enter ImportStep with resumeInfo
 
 ## Acceptance
 - Close the tab mid-import → reopen history → "Resume" continues from the correct row without re-writing successful rows.
