@@ -47,6 +47,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { downloadImportReportCSV, type ExportResultRow } from "@/lib/exportResults";
 import { writeBatchAdmin } from "@/services/adminFirestoreService";
+import { ImportPipeline } from "./import/ImportPipeline";
 
 type Props = {
   file: ParsedFile;
@@ -343,6 +344,15 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
           <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{collectionName}</code> in batches of {BATCH_SIZE}.
         </p>
       </div>
+
+      <ImportPipeline
+        phase={phase}
+        rowsPerSec={rowsPerSec}
+        successCount={successCount}
+        errorCount={errorCount}
+        totalRows={rowsToImport.length}
+        batchInfo={batchInfo}
+      />
 
       <Card>
         <CardHeader className="pb-3">

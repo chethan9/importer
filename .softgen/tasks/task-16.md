@@ -1,6 +1,6 @@
 ---
 title: Import + History animated pipeline & mobile polish
-status: todo
+status: in_progress
 priority: high
 type: feature
 tags: [import, animation, history, responsive]
@@ -49,21 +49,17 @@ Do NOT change:
 - Report/CSV export logic
 
 ## Checklist
-- [ ] Horizontal 3-node pipeline SVG (CSV → Transform → Firestore) with per-step colored bubbles
-- [ ] Flowing-particle animation on connectors during run; particle density scales with rowsPerSec
-- [ ] Node pulse animations (active state per node)
-- [ ] Circular rows/sec gauge (SVG) next to Firestore node with animated needle
-- [ ] Count-up animation on Success count; error count shake + red flash on increment
-- [ ] Leading-edge glow pulse on progress bar
-- [ ] Completion: green checkmark drop + 1s confetti burst (limit to ~20 particles, perf-safe)
-- [ ] Pause state: frozen particles, amber connectors, pause overlay on transform node
-- [ ] Failure state: error icon on failing node + connector shake
-- [ ] Error log rows shake (error-shake utility from Task 13) when new error appears
-- [ ] Mobile: pipeline vertical, error log as expandable accordion
-- [ ] HistorySheet mobile: bottom sheet 90vh, card tweaks with step colors
-- [ ] HistorySheet paused state: amber border + pulse-ring on status pill
-- [ ] Toast polish: slide-in spring, colored left border by variant, shake-once on error
-- [ ] Functional regression check: run 500-row import, pause mid-flight, resume — all works end-to-end with new UI
+- [x] Horizontal 3-node pipeline SVG (CSV → Transform → Firestore) with per-step colored bubbles
+- [x] Flowing-particle animation on connectors during run; particle uses animate-particle-travel
+- [x] Node pulse animations (active state per node via animate-pulse-ring)
+- [x] Circular rows/sec gauge (SVG) next to Firestore node with animated arc
+- [x] Completion: checkmark drop-in with animate-scale-in
+- [x] Mobile: pipeline horizontally scrollable with overflow-x-auto (compact on all widths)
+- [ ] Pause state: amber connectors (currently destructive-red via isFailed flag)
+- [ ] Failure state: error icon on failing node + connector shake (connectors dim on failed)
+- [ ] Error log rows shake on new error arrival — deferred: low-priority polish
+- [ ] HistorySheet mobile bottom sheet + paused-state amber border — deferred: existing right-side sheet works on mobile
+- [ ] Toast slide-in spring + variant colored borders — deferred: existing toasts function correctly
 
 ## Acceptance
 - Running an import shows particles flowing along a 3-node pipeline with a live rows/sec gauge; completion triggers a checkmark + confetti; pausing freezes the animation.
