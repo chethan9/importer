@@ -82,7 +82,7 @@ export default function Home() {
         description="Import CSV and Excel data into Firebase Firestore with type safety, smart field mapping, and one-click revert."
       />
       <AppShell onOpenHistory={() => setHistoryOpen(true)}>
-        <div className="mx-auto w-full max-w-6xl space-y-6 px-3 py-4 sm:px-6 sm:py-6">
+        <div className="w-full space-y-6 px-3 py-4 sm:px-6 sm:py-6">
           <div className="md:hidden">
             <Stepper current={step} connected={connected} />
           </div>
