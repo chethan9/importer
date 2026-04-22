@@ -1,6 +1,6 @@
 ---
 title: Fix and redesign import report (CSV with source columns)
-status: todo
+status: done
 priority: high
 type: bug
 tags: [export, csv, bug, admin-api]
@@ -46,14 +46,13 @@ Fix: switch to CSV-only output (drop SheetJS for this export), redesign columns,
 - `src/pages/api/admin/write-batch.ts` — guarantee `docId` in response.
 
 ## Checklist
-- [ ] Admin write-batch API returns real `docId` for every written op (including auto-generated IDs).
-- [ ] `processBatchAdmin` in ImportStep stores the returned `docId` on `WrittenDoc`.
-- [ ] New CSV exporter: UTF-8 BOM, proper quoting/escaping for commas, quotes, newlines in cell values.
-- [ ] Column order exactly: row_index, collection, doc_id, doc_path, status, error_message, then every original source header in order.
-- [ ] Row-index column is a plain integer (1-based, matches Excel row numbers of the source file).
-- [ ] Live run reports include full source row values in columns 7+.
-- [ ] History runs produce a metadata-only CSV with an inline "source columns not available" note next to the Download button.
-- [ ] `.xlsx` output path removed from ImportStep + HistorySheet; filename ends in `.csv`.
+- [x] Admin write-batch API returns real docId for every written op (via ref.id)
+- [x] processBatchAdmin threads returned docId into WrittenDoc
+- [x] CSV exporter with UTF-8 BOM and proper escaping (src/lib/exportResults.ts)
+- [x] Column order: row_index, collection, doc_id, doc_path, status, error_message, then source headers
+- [x] Live run reports include full source row values
+- [x] History runs produce metadata-only CSV
+- [x] .xlsx output path removed
 
 ## Acceptance
 - Opening the downloaded CSV in Excel or Google Sheets shows real integers in `row_index` (no `#NUM!`).

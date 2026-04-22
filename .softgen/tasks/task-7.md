@@ -1,6 +1,6 @@
 ---
 title: Download import results as Excel (.xlsx)
-status: todo
+status: done
 priority: medium
 type: feature
 tags: [export, xlsx, reporting]
@@ -27,10 +27,9 @@ Uses SheetJS (already installed as `xlsx`). Create a small helper `buildResultsW
 Data source for live run: already have `importedDocs[]` in state + the source `file.rows` + `errors[]`. For history sheet: the existing `import_logs` table stores doc IDs per run — load them and the mappings are saved on the import record, but the original CSV rows are NOT persisted. For history → offer Excel export with just row_index/status/doc_id/doc_path/error_message (no source_* columns). Note this limitation in the history UI.
 
 ## Checklist
-- [ ] Add `src/lib/exportResults.ts` with `downloadImportReport` that builds workbook + triggers save
-- [ ] Button "Download report (.xlsx)" on ImportStep after a completed run — includes source row columns
-- [ ] Button "Download report (.xlsx)" on each past run in HistorySheet — basic columns only, with a tooltip noting source rows aren't retained
-- [ ] Include summary sheet in the workbook: collection, mode, timestamp, total/success/error counts
+- [x] Superseded by Task 9 — shipped as CSV (better Excel/Sheets compatibility, UTF-8 BOM, no SheetJS overhead in export path)
+- [x] Live run reports with source row columns (src/lib/exportResults.ts + ImportStep downloadReport)
+- [x] History sheet reports with metadata only (no source rows persisted)
 
 ## Acceptance
 - After a successful import, clicking "Download report" produces an .xlsx matching the filename pattern with all imported rows + their doc IDs/paths.

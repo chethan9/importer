@@ -1,6 +1,6 @@
 ---
 title: Reference-by-query source for Firestore reference fields
-status: todo
+status: done
 priority: high
 type: feature
 tags: [firebase, mapping, reference, query]
@@ -33,14 +33,14 @@ UI on leaf: when source kind = "refQuery", show 3 compact inputs: collection (te
 Validation: field's Firestore type must be "reference" (auto-set when user picks refQuery); otherwise show a warning.
 
 ## Checklist
-- [ ] Extend `Source` union in mappingTree.ts with `refQuery` variant and resolver stub
-- [ ] Make `buildRowData` async, with per-batch cache map for ref lookups
-- [ ] Update ImportStep.processBatch to await async row building
-- [ ] Add "Reference by query" option to the source dropdown on each leaf
-- [ ] Inline editor on the leaf row: collection input, match field input, match-value source picker, onMissing toggle
-- [ ] FirestorePreview shows reference source summary (no live query)
-- [ ] Auto-switch Firestore type to `reference` when user picks refQuery
-- [ ] Error log entry when `onMissing: "error"` and no doc found
+- [x] Extended Source union in mappingTree.ts with refQuery variant
+- [x] buildRowData resolves refQuery via refCache
+- [x] ImportStep awaits collectRefQueryLookups + resolveRefQueries (batched via Task 10)
+- [x] "Reference by query" option on each leaf with collection + matchField + matchSource inputs
+- [x] FirestorePreview shows reference chip summary
+- [x] Firestore type auto-set to reference for refQuery source
+- [x] Error log entry when onMissing=error and no doc found
+- [x] Admin path: /api/admin/resolve-refs-batch endpoint (Task 10) with param-name mismatch fix
 
 ## Acceptance
 - User can map a leaf field to "Reference by query", set collection + match field + source, and import succeeds with a real `DocumentReference` written to Firestore (verify in Firebase console).
