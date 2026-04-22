@@ -10,9 +10,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { useFirebase, loadServiceAccount, saveServiceAccount } from "@/contexts/FirebaseContext";
+import { useFirebase, loadServiceAccount } from "@/contexts/FirebaseContext";
 import { type FirebaseConfig, loadLastConfig, validateConfig } from "@/lib/firebase";
-import type { ServiceAccount } from "@/services/adminFirestoreService";
+import { saveServiceAccount, type ServiceAccount } from "@/services/adminFirestoreService";
 
 const FIELDS: Array<{ key: keyof FirebaseConfig; label: string; placeholder: string; required: boolean }> = [
   { key: "apiKey", label: "API Key", placeholder: "AIzaSy…", required: true },
@@ -24,7 +24,7 @@ const FIELDS: Array<{ key: keyof FirebaseConfig; label: string; placeholder: str
 ];
 
 export function ConnectStep() {
-  const { connected, config: activeConfig, connectWeb, connectAdmin, connecting, error } = useFirebase();
+  const { connected, config: activeConfig, connectWeb, connectAdmin } = useFirebase();
   const { toast } = useToast();
   const [jsonText, setJsonText] = useState("");
   const [fieldsForm, setFieldsForm] = useState<FirebaseConfig>({
@@ -36,6 +36,8 @@ export function ConnectStep() {
     appId: "",
   });
   const [saJsonText, setSaJsonText] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
   const saFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -64,17 +66,22 @@ export function ConnectStep() {
   }
 
   async function onConnectWeb(cfg: FirebaseConfig) {
-    const ok = validateConfig(cfg);
-    if (!ok.valid) {
-      toast({ title: "Missing fields", description: ok.missing.join(", "), variant: "destructive" });
+    const validationError = validateConfig(cfg);
+    if (validationError) {
+      toast({ title: "Missing fields", description: validationError, variant: "destructive" });
       return;
     }
+    setConnecting(true);
+    setLocalError(null);
     try {
       await connectWeb(cfg);
       toast({ title: "Connected", description: `Project ${cfg.projectId}` });
     } catch (e) {
       const msg = e instanceof FirebaseError ? e.message : e instanceof Error ? e.message : "Connect failed";
+      setLocalError(msg);
       toast({ title: "Connection failed", description: msg, variant: "destructive" });
+    } finally {
+      setConnecting(false);
     }
   }
 
@@ -90,13 +97,18 @@ export function ConnectStep() {
       toast({ title: "Incomplete service account", description: "Need project_id, client_email, private_key.", variant: "destructive" });
       return;
     }
+    setConnecting(true);
+    setLocalError(null);
     try {
       await connectAdmin(parsed);
       saveServiceAccount(parsed);
       toast({ title: "Connected (admin)", description: `Project ${parsed.project_id}` });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Connect failed";
+      setLocalError(msg);
       toast({ title: "Connection failed", description: msg, variant: "destructive" });
+    } finally {
+      setConnecting(false);
     }
   }
 
@@ -273,10 +285,10 @@ export function ConnectStep() {
         </Tabs>
       </Card>
 
-      {error && (
+      {localError && (
         <Alert variant="destructive" className="animate-error-shake">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>{localError}</AlertDescription>
         </Alert>
       )}
     </div>
