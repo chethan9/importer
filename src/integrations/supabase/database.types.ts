@@ -1,4 +1,4 @@
- 
+/* eslint-disable @typescript-eslint/no-empty-object-type */
 export type Json =
   | string
   | number
@@ -59,7 +59,10 @@ export type Database = {
           completed_at: string | null
           error_count: number
           error_log: Json | null
+          failed_rows: Json
+          file_signature: string | null
           id: string
+          last_processed_row: number
           mappings: Json | null
           mode: string
           project_id: string
@@ -74,7 +77,10 @@ export type Database = {
           completed_at?: string | null
           error_count?: number
           error_log?: Json | null
+          failed_rows?: Json
+          file_signature?: string | null
           id?: string
+          last_processed_row?: number
           mappings?: Json | null
           mode: string
           project_id: string
@@ -89,7 +95,10 @@ export type Database = {
           completed_at?: string | null
           error_count?: number
           error_log?: Json | null
+          failed_rows?: Json
+          file_signature?: string | null
           id?: string
+          last_processed_row?: number
           mappings?: Json | null
           mode?: string
           project_id?: string

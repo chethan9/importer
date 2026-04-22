@@ -1,6 +1,6 @@
 ---
 title: Concurrent batched ref lookups
-status: todo
+status: done
 priority: high
 type: feature
 tags: [performance, refs, api]
@@ -22,12 +22,12 @@ Rework to batch + parallelize:
 Existing files: `src/lib/mappingTree.ts` (collectRefQueryLookups + resolveRefQueries), `src/pages/api/admin/resolve-ref.ts`, `src/components/importer/ImportStep.tsx`.
 
 ## Checklist
-- [ ] New admin endpoint that accepts grouped lookups, chunks into 30-value `in` queries, runs chunks in parallel, returns flat path map
-- [ ] Web-SDK batch resolver that groups by (collection, field), chunks, runs in parallel
-- [ ] ImportStep calls batch endpoint once with all dedup'd lookups before the write loop
-- [ ] Live status updates during resolution: "Resolving X of Y references" with per-chunk progress
-- [ ] Handle missing matches cleanly — return empty path for un-found values; keep per-field `onMissing` behaviour unchanged
-- [ ] Fail one chunk gracefully without blocking others — log chunk error, mark those values as unresolved
+- [x] New admin endpoint that accepts grouped lookups, chunks into 30-value `in` queries, runs chunks in parallel, returns flat path map
+- [x] Web-SDK batch resolver that groups by (collection, field), chunks, runs in parallel
+- [x] ImportStep calls batch endpoint once with all dedup'd lookups before the write loop
+- [x] Live status updates during resolution: "Resolving X of Y references" with per-chunk progress
+- [x] Handle missing matches cleanly — return empty path for un-found values; keep per-field `onMissing` behaviour unchanged
+- [x] Fail one chunk gracefully without blocking others — log chunk error, mark those values as unresolved
 
 ## Acceptance
 - A 5k-row import with 2 refQuery fields resolves references in < 5 seconds on a typical connection (previously 30s+).
