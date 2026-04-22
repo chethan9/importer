@@ -5,55 +5,115 @@ import { withAdmin, type ServiceAccountJson } from "@/lib/firebaseAdmin";
 type DocOp = {
   docId?: string;
   data: Record<string, unknown>;
-  mode: "create" | "merge";
+  merge: boolean;
+  rowIndex: number;
 };
 
-// Recursively convert sentinel strings to FieldValue objects
 function reviveSentinels(value: unknown): unknown {
-  if (value === "__SERVER_TIMESTAMP__") return FieldValue.serverTimestamp();
-  if (Array.isArray(value)) return value.map(reviveSentinels);
-  if (value && typeof value === "object") {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const o = value as Record<string, unknown>;
+    if (o.__type === "serverTimestamp") return FieldValue.serverTimestamp();
+    if (o.__type === "ref" && typeof o.path === "string") return { __ref__: o.path };
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = reviveSentinels(v);
-    }
+    for (const [k, v] of Object.entries(o)) out[k] = reviveSentinels(v);
     return out;
   }
+  if (Array.isArray(value)) return value.map(reviveSentinels);
   return value;
 }
+
+function resolveRefs(db: FirebaseFirestore.Firestore, value: unknown): unknown {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const o = value as Record<string, unknown>;
+    if (typeof o.__ref__ === "string") return db.doc(o.__ref__);
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(o)) out[k] = resolveRefs(db, v);
+    return out;
+  }
+  if (Array.isArray(value)) return value.map((v) => resolveRefs(db, v));
+  return value;
+}
+
+type ResultRow = {
+  docId: string;
+  action: "created" | "updated";
+  preSnapshot: Record<string, unknown> | null;
+  rowIndex: number;
+  error?: string;
+};
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   try {
-    const { serviceAccount, collection, ops } = req.body as {
+    const { serviceAccount, collection, ops, checkExisting } = req.body as {
       serviceAccount: ServiceAccountJson;
       collection: string;
       ops: DocOp[];
+      checkExisting?: boolean;
     };
 
     const results = await withAdmin(serviceAccount, async (db) => {
-      const out: Array<{ path: string; ok: boolean; error?: string }> = [];
+      const out: ResultRow[] = [];
       const batch = db.batch();
-      const refs: FirebaseFirestore.DocumentReference[] = [];
+      const queued: Array<{ ref: FirebaseFirestore.DocumentReference; op: DocOp; preSnapshot: Record<string, unknown> | null; action: "created" | "updated" }> = [];
 
       for (const op of ops) {
         const ref = op.docId
           ? db.collection(collection).doc(op.docId)
           : db.collection(collection).doc();
-        const data = reviveSentinels(op.data) as Record<string, unknown>;
-        if (op.mode === "merge") batch.set(ref, data, { merge: true });
+
+        let preSnapshot: Record<string, unknown> | null = null;
+        let action: "created" | "updated" = "created";
+
+        if (checkExisting && op.docId) {
+          try {
+            const snap = await ref.get();
+            if (snap.exists) {
+              preSnapshot = (snap.data() as Record<string, unknown>) ?? null;
+              action = "updated";
+            }
+          } catch (err) {
+            out.push({
+              docId: ref.id,
+              action: "created",
+              preSnapshot: null,
+              rowIndex: op.rowIndex,
+              error: err instanceof Error ? err.message : "Pre-read failed",
+            });
+            continue;
+          }
+        }
+
+        const data = resolveRefs(db, reviveSentinels(op.data)) as Record<string, unknown>;
+        if (op.merge) batch.set(ref, data, { merge: true });
         else batch.set(ref, data);
-        refs.push(ref);
+        queued.push({ ref, op, preSnapshot, action });
       }
 
       try {
-        await batch.commit();
-        refs.forEach((r) => out.push({ path: r.path, ok: true }));
+        if (queued.length > 0) await batch.commit();
+        queued.forEach((q) =>
+          out.push({
+            docId: q.ref.id,
+            action: q.action,
+            preSnapshot: q.preSnapshot,
+            rowIndex: q.op.rowIndex,
+          }),
+        );
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Batch failed";
-        refs.forEach((r) => out.push({ path: r.path, ok: false, error: msg }));
+        const msg = err instanceof Error ? err.message : "Batch commit failed";
+        queued.forEach((q) =>
+          out.push({
+            docId: q.ref.id,
+            action: q.action,
+            preSnapshot: q.preSnapshot,
+            rowIndex: q.op.rowIndex,
+            error: msg,
+          }),
+        );
       }
-      return out;
+
+      return out.sort((a, b) => a.rowIndex - b.rowIndex);
     });
 
     return res.status(200).json({ results });

@@ -1,70 +1,65 @@
-import * as XLSX from "xlsx";
-
 export type ExportResultRow = {
   rowIndex: number;
   status: "success" | "error";
   docId: string;
   docPath: string;
   errorMessage: string;
-  sourceRow?: Record<string, unknown>;
 };
 
-export type ExportReport = {
+export type ExportReportInput = {
   collection: string;
-  mode: string;
-  startedAt: string | Date;
-  totalRows: number;
-  successCount: number;
-  errorCount: number;
   results: ExportResultRow[];
-  includeSourceColumns?: boolean;
+  sourceHeaders?: string[];
+  sourceRows?: Record<string, unknown>[];
+  startedAt: string | Date;
 };
 
-export function downloadImportReport(report: ExportReport): void {
-  const wb = XLSX.utils.book_new();
-  const startedAt = typeof report.startedAt === "string" ? new Date(report.startedAt) : report.startedAt;
+function escapeCsv(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const str = typeof value === "object" ? JSON.stringify(value) : String(value);
+  if (/[",\n\r]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
+  return str;
+}
 
-  const summaryRows = [
-    ["Firebase Import Report"],
-    [],
-    ["Collection", report.collection],
-    ["Mode", report.mode],
-    ["Started at", startedAt.toLocaleString()],
-    ["Total rows", report.totalRows],
-    ["Succeeded", report.successCount],
-    ["Failed", report.errorCount],
+export function downloadImportReportCSV(input: ExportReportInput): void {
+  const { collection, results, sourceHeaders = [], sourceRows = [], startedAt } = input;
+  const headers = [
+    "row_index",
+    "collection",
+    "doc_id",
+    "doc_path",
+    "status",
+    "error_message",
+    ...sourceHeaders,
   ];
-  const summary = XLSX.utils.aoa_to_sheet(summaryRows);
-  summary["!cols"] = [{ wch: 16 }, { wch: 40 }];
-  XLSX.utils.book_append_sheet(wb, summary, "Summary");
+  const lines: string[] = [headers.map(escapeCsv).join(",")];
 
-  const sourceKeys = new Set<string>();
-  if (report.includeSourceColumns) {
-    report.results.forEach((r) => r.sourceRow && Object.keys(r.sourceRow).forEach((k) => sourceKeys.add(k)));
+  const sorted = [...results].sort((a, b) => a.rowIndex - b.rowIndex);
+  for (const r of sorted) {
+    const src = sourceRows[r.rowIndex] ?? {};
+    const row = [
+      r.rowIndex + 2, // +2: 1-based + account for header row in source file
+      collection,
+      r.docId,
+      r.docPath,
+      r.status,
+      r.errorMessage,
+      ...sourceHeaders.map((h) => src[h]),
+    ];
+    lines.push(row.map(escapeCsv).join(","));
   }
-  const sourceCols = Array.from(sourceKeys);
 
-  const resultsData = report.results.map((r) => {
-    const base: Record<string, unknown> = {
-      row_index: r.rowIndex + 1,
-      status: r.status,
-      doc_id: r.docId,
-      doc_path: r.docPath,
-      error_message: r.errorMessage,
-    };
-    sourceCols.forEach((k) => {
-      const v = r.sourceRow?.[k];
-      base[`source_${k}`] = v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
-    });
-    return base;
-  });
-
-  const results = XLSX.utils.json_to_sheet(resultsData.length ? resultsData : [{ row_index: "", status: "", doc_id: "", doc_path: "", error_message: "" }]);
-  results["!cols"] = [{ wch: 10 }, { wch: 10 }, { wch: 28 }, { wch: 48 }, { wch: 60 }, ...sourceCols.map(() => ({ wch: 22 }))];
-  XLSX.utils.book_append_sheet(wb, results, "Results");
-
-  const stamp = startedAt.toISOString().slice(0, 19).replace(/[:]/g, "-");
-  const safeCollection = report.collection.replace(/[^a-zA-Z0-9_-]/g, "_");
-  const filename = `firebase-import_${safeCollection}_${stamp}.xlsx`;
-  XLSX.writeFile(wb, filename);
+  const csv = "\uFEFF" + lines.join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const stamp = (typeof startedAt === "string" ? new Date(startedAt) : startedAt)
+    .toISOString()
+    .slice(0, 19)
+    .replace(/[:]/g, "-");
+  const safe = collection.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `firebase-import_${safe}_${stamp}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }

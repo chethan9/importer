@@ -38,7 +38,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { downloadImportReport, type ExportResultRow } from "@/lib/exportResults";
+import { downloadImportReportCSV, type ExportResultRow } from "@/lib/exportResults";
 import { writeBatchAdmin } from "@/services/adminFirestoreService";
 
 type Props = {
@@ -213,7 +213,6 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
         docId: r.docId,
         docPath: r.docPath,
         errorMessage: "",
-        sourceRow: rowsToImport[r.rowIndex - 0] ?? rowsToImport[r.rowIndex],
       });
     });
     errors.forEach((e) => {
@@ -223,19 +222,14 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
         docId: "",
         docPath: "",
         errorMessage: `${e.field ? e.field + ": " : ""}${e.message}`,
-        sourceRow: rowsToImport[e.rowIndex],
       });
     });
-    results.sort((a, b) => a.rowIndex - b.rowIndex);
-    downloadImportReport({
+    downloadImportReportCSV({
       collection: collectionName,
-      mode: config.mode,
-      startedAt: startedAt ?? new Date(),
-      totalRows: rowsToImport.length,
-      successCount,
-      errorCount,
       results,
-      includeSourceColumns: true,
+      sourceHeaders: file.headers,
+      sourceRows: rowsToImport,
+      startedAt: startedAt ?? new Date(),
     });
   }
 
@@ -358,7 +352,7 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
 
           {(phase === "done" || phase === "failed") && (successCount > 0 || errorCount > 0) && (
             <Button variant="outline" onClick={downloadReport} className="w-full">
-              <FileSpreadsheet className="mr-2 h-4 w-4" /> Download report (.xlsx)
+              <FileSpreadsheet className="mr-2 h-4 w-4" /> Download report (.csv)
             </Button>
           )}
         </CardContent>
