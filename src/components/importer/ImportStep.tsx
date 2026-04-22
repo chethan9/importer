@@ -227,7 +227,7 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
     downloadImportReportCSV({
       collection: collectionName,
       results,
-      sourceHeaders: file.headers,
+      sourceHeaders: file.columns,
       sourceRows: rowsToImport,
       startedAt: startedAt ?? new Date(),
     });
