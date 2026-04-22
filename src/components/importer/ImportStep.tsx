@@ -28,6 +28,7 @@ import { useFirebase } from "@/contexts/FirebaseContext";
 import type { ParsedFile } from "./UploadStep";
 import type { MappingConfig } from "./MappingStep";
 import { buildRowData, collectRefQueryLookups, resolveRefQueries, parseManualRefPath } from "@/lib/mappingTree";
+import { coerceValue, toAdminJSON } from "@/lib/coerce";
 import {
   createImportRecord,
   logImportedDocs,
@@ -624,9 +625,28 @@ async function processBatchAdmin(
           target[name] = { __type: "ref", path };
           continue;
         }
-        if (node.source.kind === "column") target[name] = row[node.source.column];
-        else if (node.source.kind === "fixed") target[name] = node.source.value;
-        else if (node.source.kind === "autoIncrement") target[name] = node.source.start + rowIndex * node.source.step;
+
+        let raw: unknown;
+        if (node.source.kind === "column") raw = row[node.source.column];
+        else if (node.source.kind === "fixed") raw = node.source.value;
+        else if (node.source.kind === "autoIncrement") raw = node.source.start + rowIndex * node.source.step;
+        else raw = undefined;
+
+        if (node.firestoreType === "reference") {
+          const str = raw === null || raw === undefined ? "" : String(raw).trim();
+          if (!str) continue;
+          const cleaned = str.replace(/^\/+|\/+$/g, "");
+          if (cleaned.split("/").length < 2 || cleaned.split("/").length % 2 !== 0) {
+            rowErrs.push({ field: name, message: `Reference "${str}" must be a path like collection/docId` });
+            continue;
+          }
+          target[name] = { __type: "ref", path: cleaned };
+          continue;
+        }
+
+        const res = coerceValue(raw, node.firestoreType, { arrayElementType: node.arrayElementType });
+        if (!res.ok) { rowErrs.push({ field: name, message: res.error }); continue; }
+        if (res.value !== null || node.firestoreType === "null") target[name] = toAdminJSON(res.value);
       }
     };
     walk(config.tree, data);

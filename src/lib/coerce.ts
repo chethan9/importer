@@ -212,3 +212,28 @@ export function inferTypeFromSamples(values: unknown[]): FirestoreType {
   }
   return best;
 }
+
+export function toAdminJSON(value: unknown): unknown {
+  if (value === null || value === undefined) return value;
+  if (value instanceof Timestamp) {
+    return { __type: "timestamp", seconds: value.seconds, nanoseconds: value.nanoseconds };
+  }
+  if (value instanceof GeoPoint) {
+    return { __type: "geopoint", latitude: value.latitude, longitude: value.longitude };
+  }
+  if (value instanceof DocumentReference) {
+    return { __type: "ref", path: value.path };
+  }
+  if (value instanceof Bytes) {
+    return { __type: "bytes", base64: value.toBase64() };
+  }
+  if (Array.isArray(value)) return value.map(toAdminJSON);
+  if (typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    if (typeof o.__type === "string") return o;
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(o)) out[k] = toAdminJSON(v);
+    return out;
+  }
+  return value;
+}

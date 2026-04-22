@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp, GeoPoint } from "firebase-admin/firestore";
 import { withAdmin, type ServiceAccountJson } from "@/lib/firebaseAdmin";
 
 type DocOp = {
@@ -17,6 +17,15 @@ function revive(db: FirebaseFirestore.Firestore, value: unknown): unknown {
     const o = value as Record<string, unknown>;
     if (o.__type === "serverTimestamp") return FieldValue.serverTimestamp();
     if (o.__type === "ref" && typeof o.path === "string") return db.doc(o.path);
+    if (o.__type === "timestamp" && typeof o.seconds === "number" && typeof o.nanoseconds === "number") {
+      return new Timestamp(o.seconds, o.nanoseconds);
+    }
+    if (o.__type === "geopoint" && typeof o.latitude === "number" && typeof o.longitude === "number") {
+      return new GeoPoint(o.latitude, o.longitude);
+    }
+    if (o.__type === "bytes" && typeof o.base64 === "string") {
+      return Buffer.from(o.base64, "base64");
+    }
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(o)) out[k] = revive(db, v);
     return out;
