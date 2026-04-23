@@ -123,21 +123,6 @@ export function ConnectStep() {
 
   return (
     <div className="mx-auto w-full max-w-3xl animate-fade-in-up space-y-6 px-4 pb-20 sm:px-6">
-      <div className="flex items-center gap-3">
-        <div
-          className="flex h-11 w-11 items-center justify-center rounded-full text-white shadow-md"
-          style={{ backgroundColor: "hsl(var(--step-connect))" }}
-        >
-          <KeyRound className="h-5 w-5" />
-        </div>
-        <div>
-          <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Connect to Firebase</h2>
-          <p className="text-sm text-muted-foreground">
-            Service account (recommended) or Web SDK config. Credentials stay in your browser.
-          </p>
-        </div>
-      </div>
-
       {connected && activeConfig && (
         <Alert
           className="border-[hsl(var(--step-connect))] bg-[hsl(var(--step-connect))]/5"

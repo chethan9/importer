@@ -336,15 +336,6 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-heading text-2xl font-semibold">Run import</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Writing <span className="font-medium text-foreground">{rowsToImport.length}</span>
-          {limitEnabled && <span> of {file.rows.length}</span>} rows to{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{collectionName}</code> in batches of {BATCH_SIZE}.
-        </p>
-      </div>
-
       <ImportPipeline
         phase={phase}
         rowsPerSec={rowsPerSec}

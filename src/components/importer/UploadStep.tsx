@@ -94,22 +94,6 @@ export function UploadStep({ value, onChange, onBack, onNext, collectionName }: 
 
   return (
     <div className="mx-auto w-full max-w-4xl animate-fade-in-up space-y-6 px-4 pb-20 sm:px-6">
-      <div className="flex items-center gap-3">
-        <div
-          className="flex h-11 w-11 items-center justify-center rounded-full text-white shadow-md"
-          style={{ backgroundColor: "hsl(var(--step-upload))" }}
-        >
-          <Upload className="h-5 w-5" />
-        </div>
-        <div>
-          <h2 className="font-heading text-2xl font-semibold sm:text-3xl">Upload source file</h2>
-          <p className="text-sm text-muted-foreground">
-            CSV, TSV or Excel — rows go into{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{collectionName}</code>
-          </p>
-        </div>
-      </div>
-
       {!value ? (
         <Card
           className={`card-lift border-2 border-dashed transition-all ${isDragging ? "scale-[1.01]" : ""}`}
