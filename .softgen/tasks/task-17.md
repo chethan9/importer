@@ -1,6 +1,6 @@
 ---
 title: Compact mapping step header
-status: todo
+status: done
 priority: high
 type: chore
 tags: [ui, mapping]
