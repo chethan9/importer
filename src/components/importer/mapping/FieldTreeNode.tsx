@@ -7,6 +7,7 @@ import {
   X,
   Columns3,
   Lock,
+  LockOpen,
   Hash,
   MinusCircle,
   Braces,
@@ -172,7 +173,7 @@ function LeafNodeRow(props: Props & { node: LeafNode }) {
 
       <Select
         value={node.firestoreType}
-        onValueChange={(v) => onLeafChange(node.id, { firestoreType: v as FirestoreType })}
+        onValueChange={(v) => onLeafChange(node.id, { firestoreType: v as FirestoreType, typeLocked: true })}
       >
         <SelectTrigger className="h-7 w-28 border-transparent px-1.5 text-[11px] hover:border-border">
           <SelectValue />
@@ -183,6 +184,19 @@ function LeafNodeRow(props: Props & { node: LeafNode }) {
           ))}
         </SelectContent>
       </Select>
+
+      <Button
+        variant="ghost"
+        size="icon"
+        className={cn(
+          "h-6 w-6",
+          node.typeLocked ? "text-primary hover:text-primary" : "text-muted-foreground/60 hover:text-foreground",
+        )}
+        onClick={() => onLeafChange(node.id, { typeLocked: !node.typeLocked })}
+        title={node.typeLocked ? "Type is locked — won't change on column drop" : "Type is auto (follows dropped column)"}
+      >
+        {node.typeLocked ? <Lock className="h-3 w-3" /> : <LockOpen className="h-3 w-3" />}
+      </Button>
 
       {node.firestoreType === "array" && (
         <Select

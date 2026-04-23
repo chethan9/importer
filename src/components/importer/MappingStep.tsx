@@ -181,6 +181,30 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
   }
   function onDropColumn(leafId: string, column: string) {
     const detected = inferredTypes[column] ?? "string";
+    const ctx = findNodeWithContext(treeRef.current, leafId);
+    const currentNode = ctx?.node;
+    if (currentNode && currentNode.kind === "leaf" && currentNode.typeLocked && currentNode.firestoreType !== detected) {
+      setTree((t) =>
+        updateNodeById(t, leafId, (n) => {
+          if (n.kind !== "leaf") return n;
+          return { ...n, source: { kind: "column", column } };
+        }),
+      );
+      const changeAnyway = () => {
+        setTree((t) =>
+          updateNodeById(t, leafId, (n) => {
+            if (n.kind !== "leaf") return n;
+            return { ...n, firestoreType: detected };
+          }),
+        );
+      };
+      toast({
+        title: `Type mismatch on "${currentNode.name || "field"}"`,
+        description: `Column "${column}" looks like ${detected}, but this field is locked as ${currentNode.firestoreType}. Values will be coerced.`,
+        action: <ToastAction altText="Change type" onClick={changeAnyway}>Change to {detected}</ToastAction>,
+      });
+      return;
+    }
     setTree((t) =>
       updateNodeById(t, leafId, (n) => {
         if (n.kind !== "leaf") return n;

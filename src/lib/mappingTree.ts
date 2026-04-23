@@ -33,6 +33,7 @@ export type LeafNode = {
   firestoreType: FirestoreType;
   arrayElementType?: ArrayElementType;
   source: Source;
+  typeLocked?: boolean;
 };
 
 export type MapNode = {
