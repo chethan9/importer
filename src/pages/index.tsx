@@ -83,10 +83,6 @@ export default function Home() {
       />
       <AppShell onOpenHistory={() => setHistoryOpen(true)}>
         <div className="w-full space-y-6 px-3 py-4 sm:px-6 sm:py-6">
-          <div className="md:hidden">
-            <Stepper current={step} connected={connected} />
-          </div>
-
           {step === 1 && <ConnectStep />}
           {step === 2 && <BrowseStep />}
           {step === 3 && collectionInfo && (
