@@ -39,6 +39,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { ToastAction } from "@/components/ui/toast";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { collectBoundColumns as _collectBoundColumns } from "@/lib/mappingTree";
 import { listPresets, savePreset, updatePreset, deletePreset, type MappingPreset } from "@/services/presetService";
 
@@ -290,64 +292,88 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="font-heading text-2xl font-semibold">Map your data</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Drag CSV columns from the left onto Firestore fields on the right. Expand maps to reach nested fields.
-        </p>
-      </div>
+      <TooltipProvider delayDuration={200}>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border bg-card px-3 py-2">
+          <div className="flex items-center gap-2">
+            <h2 className="font-heading text-base font-semibold">Map your data</h2>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="cursor-help text-xs text-muted-foreground">?</span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs">
+                Drag CSV columns from the left onto Firestore fields on the right. Expand maps to reach nested fields.
+              </TooltipContent>
+            </Tooltip>
+          </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Import mode</CardTitle>
-            <CardDescription>How to handle documents</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <RadioGroup value={mode} onValueChange={(v) => setMode(v as ImportMode)}>
-              <div className="flex items-start gap-3 rounded-md border p-3">
-                <RadioGroupItem value="create" id="mode-create" className="mt-0.5" />
-                <Label htmlFor="mode-create" className="flex-1 cursor-pointer font-normal">
-                  <div className="font-medium">Create new</div>
-                  <div className="text-xs text-muted-foreground">Fail if a doc with the same ID exists</div>
-                </Label>
-              </div>
-              <div className="flex items-start gap-3 rounded-md border p-3">
-                <RadioGroupItem value="merge" id="mode-merge" className="mt-0.5" />
-                <Label htmlFor="mode-merge" className="flex-1 cursor-pointer font-normal">
-                  <div className="font-medium">Merge / upsert</div>
-                  <div className="text-xs text-muted-foreground">Update existing, create if missing. Snapshotted for revert.</div>
-                </Label>
-              </div>
-            </RadioGroup>
-          </CardContent>
-        </Card>
+          <div className="h-5 w-px bg-border" />
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Document ID</CardTitle>
-            <CardDescription>How to identify each doc</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <RadioGroup
-              value={docIdStrategy.kind}
-              onValueChange={(v) =>
-                setDocIdStrategy(v === "auto" ? { kind: "auto" } : { kind: "column", column: file.columns[0] ?? "" })
-              }
-            >
-              <div className="flex items-center gap-3">
-                <RadioGroupItem value="auto" id="id-auto" />
-                <Label htmlFor="id-auto" className="cursor-pointer font-normal">Auto-generate IDs</Label>
-              </div>
-              <div className="flex items-center gap-3">
-                <RadioGroupItem value="column" id="id-col" />
-                <Label htmlFor="id-col" className="cursor-pointer font-normal">Use column value</Label>
-              </div>
-            </RadioGroup>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Mode</span>
+            <div className="inline-flex rounded-md border bg-muted/40 p-0.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => setMode("create")}
+                    className={cn(
+                      "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                      mode === "create" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    Create new
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Fail if a doc with the same ID exists</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => setMode("merge")}
+                    className={cn(
+                      "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                      mode === "merge" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    Merge / upsert
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Update existing, create if missing. Snapshotted for revert.</TooltipContent>
+              </Tooltip>
+            </div>
+          </div>
+
+          <div className="h-5 w-px bg-border" />
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Doc ID</span>
+            <div className="inline-flex rounded-md border bg-muted/40 p-0.5">
+              <button
+                type="button"
+                onClick={() => setDocIdStrategy({ kind: "auto" })}
+                className={cn(
+                  "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                  docIdStrategy.kind === "auto" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Auto
+              </button>
+              <button
+                type="button"
+                onClick={() => setDocIdStrategy({ kind: "column", column: docIdStrategy.kind === "column" ? docIdStrategy.column : (file.columns[0] ?? "") })}
+                className={cn(
+                  "rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                  docIdStrategy.kind === "column" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                From column
+              </button>
+            </div>
             {docIdStrategy.kind === "column" && (
               <Select value={docIdStrategy.column} onValueChange={(col) => setDocIdStrategy({ kind: "column", column: col })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select ID column" />
+                <SelectTrigger className="h-8 w-[180px] text-xs">
+                  <SelectValue placeholder="Select column" />
                 </SelectTrigger>
                 <SelectContent>
                   {file.columns.map((c) => (
@@ -356,9 +382,9 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
                 </SelectContent>
               </Select>
             )}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </div>
+      </TooltipProvider>
 
       <div className="grid gap-4 lg:grid-cols-[3fr_1fr]">
         <Card>
