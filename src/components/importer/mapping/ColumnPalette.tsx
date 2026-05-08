@@ -80,7 +80,7 @@ function ColumnChip({
       className={cn(
         "group inline-flex max-w-full cursor-grab items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[11px] transition-all active:cursor-grabbing active:scale-95",
         bound
-          ? "border-accent/40 bg-accent/10 text-accent"
+          ? "border-primary/35 bg-primary/10 text-primary"
           : "border-primary/30 bg-primary/5 text-primary hover:border-primary/60 hover:bg-primary/10 hover:shadow-sm",
       )}
       title={sampleStr ? `sample: ${sampleStr}` : column}

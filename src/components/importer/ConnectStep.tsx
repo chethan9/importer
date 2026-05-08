@@ -124,10 +124,8 @@ export function ConnectStep() {
   return (
     <div className="mx-auto w-full max-w-3xl animate-fade-in-up space-y-6 px-4 pb-20 sm:px-6">
       {connected && activeConfig && (
-        <Alert
-          className="border-[hsl(var(--step-connect))] bg-[hsl(var(--step-connect))]/5"
-        >
-          <CheckCircle2 className="h-4 w-4" style={{ color: "hsl(var(--step-connect))" }} />
+        <Alert className="border-primary/25 bg-primary/[0.06]">
+          <CheckCircle2 className="h-4 w-4 text-primary" />
           <AlertDescription className="flex items-center justify-between gap-2">
             <span>Connected to <code className="font-mono text-xs">{activeConfig.projectId}</code></span>
             <Badge variant="outline" className="font-mono text-[10px]">ready</Badge>
@@ -135,7 +133,7 @@ export function ConnectStep() {
         </Alert>
       )}
 
-      <Card className="overflow-hidden shadow-sm">
+      <Card className="overflow-hidden">
         <Tabs defaultValue="admin" className="w-full">
           <div className="border-b bg-muted/30 px-2 pt-2">
             <TabsList className="grid w-full grid-cols-2 bg-transparent">
@@ -188,8 +186,8 @@ export function ConnectStep() {
                 onClick={onConnectAdmin}
                 disabled={connecting || !saJsonText.trim()}
                 size="lg"
-                className="w-full text-white"
-                style={{ backgroundColor: "hsl(var(--step-connect))" }}
+                variant="default"
+                className="w-full"
               >
                 {connecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}
                 Connect with service account
@@ -230,6 +228,7 @@ export function ConnectStep() {
                       void onConnectWeb(parsed);
                     }}
                     disabled={connecting || !jsonText.trim()}
+                    size="lg"
                     className="w-full"
                   >
                     {connecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}
@@ -258,6 +257,7 @@ export function ConnectStep() {
                   <Button
                     onClick={() => void onConnectWeb(fieldsForm)}
                     disabled={connecting}
+                    size="lg"
                     className="w-full"
                   >
                     {connecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Link2 className="mr-2 h-4 w-4" />}

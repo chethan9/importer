@@ -336,13 +336,13 @@ function ColumnBinding({ column, sample, onUnbind }: { column: string; sample: u
   }
   const sampleStr = sample === null || sample === undefined || sample === "" ? "" : String(sample);
   return (
-    <div className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 font-mono text-[11px] text-accent">
+    <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/35 bg-primary/10 px-2 py-0.5 font-mono text-[11px] text-primary">
       <Columns3 className="h-3 w-3" />
       <span className="truncate max-w-[160px]">{column}</span>
       {sampleStr && (
-        <span className="hidden truncate max-w-[120px] text-accent/70 md:inline">· {sampleStr.length > 20 ? sampleStr.slice(0, 20) + "…" : sampleStr}</span>
+        <span className="hidden truncate max-w-[120px] text-primary/70 md:inline">· {sampleStr.length > 20 ? sampleStr.slice(0, 20) + "…" : sampleStr}</span>
       )}
-      <button onClick={onUnbind} className="rounded-full p-0.5 hover:bg-accent/20" aria-label="Unbind">
+      <button onClick={onUnbind} className="rounded-full p-0.5 hover:bg-primary/15" aria-label="Unbind">
         <X className="h-3 w-3" />
       </button>
     </div>
@@ -351,7 +351,7 @@ function ColumnBinding({ column, sample, onUnbind }: { column: string; sample: u
 
 function SourceKindIcon({ kind }: { kind: Source["kind"] }) {
   switch (kind) {
-    case "column": return <Columns3 className="h-3.5 w-3.5 text-accent" />;
+    case "column": return <Columns3 className="h-3.5 w-3.5 text-primary" />;
     case "fixed": return <Lock className="h-3.5 w-3.5 text-primary" />;
     case "autoIncrement": return <Hash className="h-3.5 w-3.5 text-primary" />;
     case "now": return <Clock className="h-3.5 w-3.5 text-primary" />;

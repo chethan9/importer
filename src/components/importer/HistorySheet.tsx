@@ -207,7 +207,7 @@ export function HistorySheet({ open, onOpenChange, onResumeRequest, onRetryFaile
                         </div>
                       </div>
                       <div className="flex items-center gap-3 text-xs">
-                        <span className="flex items-center gap-1 text-accent">
+                        <span className="flex items-center gap-1 text-primary">
                           <CheckCircle2 className="h-3.5 w-3.5" /> {imp.success_count} written
                         </span>
                         {imp.error_count > 0 && (
@@ -232,7 +232,7 @@ export function HistorySheet({ open, onOpenChange, onResumeRequest, onRetryFaile
                       <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
                         {canResume && (
                           <Button
-                            variant="accent"
+                            variant="default"
                             size="sm"
                             onClick={() => {
                               onOpenChange(false);
@@ -308,7 +308,7 @@ export function HistorySheet({ open, onOpenChange, onResumeRequest, onRetryFaile
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; className: string }> = {
     running: { label: "Running", className: "bg-primary/10 text-primary" },
-    completed: { label: "Completed", className: "bg-accent/10 text-accent" },
+    completed: { label: "Completed", className: "bg-primary/10 text-primary" },
     failed: { label: "Failed", className: "bg-destructive/10 text-destructive" },
     paused: { label: "Paused", className: "bg-primary/20 text-primary" },
     reverting: { label: "Reverting", className: "bg-primary/10 text-primary" },

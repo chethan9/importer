@@ -437,9 +437,9 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
               <div className="text-xs text-muted-foreground">Total</div>
               <div className="font-heading text-2xl font-semibold">{rowsToImport.length}</div>
             </div>
-            <div className="rounded-md border bg-accent/5 p-3">
+            <div className="rounded-md border bg-primary/[0.06] p-3">
               <div className="text-xs text-muted-foreground">Succeeded</div>
-              <div className="font-heading text-2xl font-semibold text-accent">{successCount}</div>
+              <div className="font-heading text-2xl font-semibold text-primary">{successCount}</div>
             </div>
             <div className="rounded-md border bg-destructive/5 p-3">
               <div className="text-xs text-muted-foreground">Failed</div>
@@ -448,7 +448,7 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
           </div>
 
           {phase === "idle" && (
-            <Button size="lg" variant="accent" onClick={run} className="w-full">
+            <Button size="lg" variant="default" onClick={run} className="w-full">
               <PlayCircle className="mr-2 h-5 w-5" /> Start import
             </Button>
           )}
@@ -458,8 +458,8 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
             </div>
           )}
           {phase === "done" && (
-            <Alert className="border-accent/40 bg-accent/5">
-              <CheckCircle2 className="h-4 w-4 text-accent" />
+            <Alert className="border-primary/25 bg-primary/[0.06]">
+              <CheckCircle2 className="h-4 w-4 text-primary" />
               <AlertDescription className="text-foreground">
                 Import complete. {successCount} documents written to <code className="font-mono text-xs">{collectionName}</code>.
                 {errorCount > 0 && ` ${errorCount} rows skipped.`}
@@ -535,7 +535,7 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
             <History className="mr-2 h-4 w-4" /> View history
           </Button>
           {(phase === "done" || phase === "failed") && (
-            <Button variant="accent" onClick={onReset}>
+            <Button variant="default" onClick={onReset}>
               <RotateCcw className="mr-2 h-4 w-4" /> Start new import
             </Button>
           )}

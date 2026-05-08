@@ -34,7 +34,7 @@ const TYPE_COLORS: Record<FirestoreFieldType, string> = {
   string: "bg-blue-500/10 text-blue-700 ring-blue-500/20",
   number: "bg-violet-500/10 text-violet-700 ring-violet-500/20",
   boolean: "bg-amber-500/10 text-amber-700 ring-amber-500/20",
-  timestamp: "bg-accent/10 text-accent ring-accent/20",
+  timestamp: "bg-sky-500/10 text-sky-700 ring-sky-500/20",
   geopoint: "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20",
   reference: "bg-primary/10 text-primary ring-primary/20",
   array: "bg-fuchsia-500/10 text-fuchsia-700 ring-fuchsia-500/20",
@@ -118,7 +118,7 @@ export function BrowseStep() {
 
   return (
     <div className="mx-auto w-full max-w-5xl animate-fade-in-up space-y-6 px-4 pb-20 sm:px-6">
-      <Card className="card-lift">
+      <Card>
         <CardHeader className="space-y-1">
           <CardTitle className="text-base">Add a collection</CardTitle>
           <CardDescription>
@@ -174,11 +174,11 @@ export function BrowseStep() {
       </Card>
 
       {selected && (
-        <Card className="card-lift animate-fade-in-up">
+        <Card className="animate-fade-in-up">
           <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <FileCode2 className="h-4 w-4 text-accent" />
+                <FileCode2 className="h-4 w-4 text-primary" />
                 <CardTitle className="font-mono text-lg">{selected.name}</CardTitle>
                 <Badge variant="outline" className="font-mono text-[10px]">
                   {selected.docCount} sampled
@@ -189,12 +189,7 @@ export function BrowseStep() {
                 from sample docs
               </CardDescription>
             </div>
-            <Button
-              size="sm"
-              variant="default"
-              onClick={() => setStep(3)}
-              className="gap-1.5 bg-accent text-accent-foreground hover:bg-accent/90"
-            >
+            <Button size="sm" variant="default" onClick={() => setStep(3)} className="gap-1.5">
               Continue to mapping
               <ArrowRight className="h-3.5 w-3.5" />
             </Button>
@@ -266,10 +261,9 @@ function CollectionCard({
       className={cn(
         "group relative rounded-xl border bg-card p-4 text-left transition-all hover:shadow-md",
         selected
-          ? "shadow-sm"
+          ? "border-primary shadow-sm ring-2 ring-primary/20"
           : "border-border hover:border-primary/40",
       )}
-      style={selected ? { borderColor: "hsl(var(--step-browse))", boxShadow: "0 0 0 3px hsl(var(--step-browse) / 0.2)" } : undefined}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -281,7 +275,7 @@ function CollectionCard({
         <div className="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
           <span
             onClick={(e) => { e.stopPropagation(); if (!templateLoading) onDownloadTemplate(); }}
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-accent"
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-primary"
             role="button"
             aria-label="Download CSV template"
             title="Download CSV template"

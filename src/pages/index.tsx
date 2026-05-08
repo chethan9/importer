@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
 import { SEO } from "@/components/SEO";
 import { AppShell } from "@/components/importer/AppShell";
-import { Stepper } from "@/components/importer/Stepper";
 import { ConnectStep } from "@/components/importer/ConnectStep";
 import { BrowseStep } from "@/components/importer/BrowseStep";
 import { UploadStep, type ParsedFile } from "@/components/importer/UploadStep";
@@ -33,7 +32,7 @@ type ResumeInfo = {
 };
 
 export default function Home() {
-  const { step, setStep, connected, collections, selectedCollection } = useFirebase();
+  const { step, setStep, collections, selectedCollection } = useFirebase();
   const [file, setFile] = useState<ParsedFile | null>(null);
   const [mapping, setMapping] = useState<MappingConfig | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);

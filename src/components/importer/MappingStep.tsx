@@ -583,7 +583,7 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             {validation.errorCount === 0 ? (
-              <><CheckCircle2 className="h-4 w-4 text-accent" /> Type validation preview</>
+              <><CheckCircle2 className="h-4 w-4 text-primary" /> Type validation preview</>
             ) : (
               <><AlertTriangle className="h-4 w-4 text-destructive" /> Type validation preview</>
             )}
@@ -620,7 +620,7 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
         <Button variant="ghost" onClick={onBack}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Back
         </Button>
-        <Button onClick={onNext} disabled={!canProceed} variant="accent">
+        <Button onClick={onNext} disabled={!canProceed} variant="default">
           Continue to import <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </div>
@@ -645,7 +645,7 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setSaveOpen(false)}>Cancel</Button>
-            <Button variant="accent" onClick={() => void onSavePreset()} disabled={!saveName.trim() || saving}>
+            <Button variant="default" onClick={() => void onSavePreset()} disabled={!saveName.trim() || saving}>
               {saving ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Saving…</> : "Save preset"}
             </Button>
           </DialogFooter>

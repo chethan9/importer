@@ -7,7 +7,7 @@ export function PlaceholderStep({ title, description }: { title: string; descrip
   const { setStep } = useFirebase();
   return (
     <div className="mx-auto w-full max-w-3xl animate-fade-in-up px-6 pb-16">
-      <Card className="card-lift">
+      <Card>
         <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground ring-1 ring-border">
             <Construction className="h-5 w-5" />

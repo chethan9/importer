@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 export type ParsedFile = {
   fileName: string;
@@ -96,8 +97,10 @@ export function UploadStep({ value, onChange, onBack, onNext, collectionName }: 
     <div className="mx-auto w-full max-w-4xl animate-fade-in-up space-y-6 px-4 pb-20 sm:px-6">
       {!value ? (
         <Card
-          className={`card-lift border-2 border-dashed transition-all ${isDragging ? "scale-[1.01]" : ""}`}
-          style={isDragging ? { borderColor: "hsl(var(--step-upload))", backgroundColor: "hsl(var(--step-upload) / 0.05)" } : undefined}
+          className={cn(
+            "border-2 border-dashed border-border/80 transition-all",
+            isDragging && "scale-[1.01] border-primary/45 bg-primary/[0.04]",
+          )}
           onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
           onDragLeave={() => setIsDragging(false)}
           onDrop={(e) => {
@@ -108,15 +111,15 @@ export function UploadStep({ value, onChange, onBack, onNext, collectionName }: 
           }}
         >
           <CardContent className="flex flex-col items-center gap-4 py-12 text-center sm:py-16">
-            <div
-              className="flex h-16 w-16 items-center justify-center rounded-full text-white shadow-md"
-              style={{ backgroundColor: "hsl(var(--step-upload))" }}
-            >
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md">
               <FileSpreadsheet className="h-7 w-7" />
             </div>
             <div>
               <p className="font-medium">Drop your file here</p>
-              <p className="text-sm text-muted-foreground">or click to browse</p>
+              <p className="text-sm text-muted-foreground">
+                or click to browse · importing into{" "}
+                <span className="font-mono text-foreground">{collectionName}</span>
+              </p>
             </div>
             <input
               ref={inputRef}
@@ -136,13 +139,10 @@ export function UploadStep({ value, onChange, onBack, onNext, collectionName }: 
           </CardContent>
         </Card>
       ) : (
-        <Card className="card-lift">
+        <Card>
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-3">
-              <div
-                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-white shadow-sm"
-                style={{ backgroundColor: "hsl(var(--step-upload))" }}
-              >
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
                 <FileSpreadsheet className="h-5 w-5" />
               </div>
               <div className="min-w-0">
@@ -207,7 +207,7 @@ export function UploadStep({ value, onChange, onBack, onNext, collectionName }: 
         <Button variant="ghost" onClick={onBack} className="sm:w-auto">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back
         </Button>
-        <Button onClick={onNext} disabled={!value} variant="accent" size="lg" className="sm:w-auto">
+        <Button onClick={onNext} disabled={!value} variant="default" size="lg" className="sm:w-auto">
           Continue to mapping <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </div>

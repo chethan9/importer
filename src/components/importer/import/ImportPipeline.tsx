@@ -26,31 +26,31 @@ export function ImportPipeline({ phase, rowsPerSec, successCount, errorCount, to
             icon={FileSpreadsheet}
             label="Source file"
             sublabel={`${totalRows.toLocaleString()} rows`}
-            colorVar="--step-upload"
+            colorVar="--primary"
             pulsing={false}
           />
-          <Connector flowing={isRunning} failed={isFailed} colorVar="--step-upload" />
+          <Connector flowing={isRunning} failed={isFailed} colorVar="--primary" />
           <PipelineNode
             icon={Zap}
             label="Transform"
             sublabel={batchInfo ? `Batch ${batchInfo.current}/${batchInfo.total}` : idle ? "Ready" : isDone ? "Complete" : isFailed ? "Paused" : "Working"}
-            colorVar="--step-map"
+            colorVar="--primary"
             pulsing={isRunning}
           />
-          <Connector flowing={isRunning} failed={isFailed} colorVar="--step-map" />
+          <Connector flowing={isRunning} failed={isFailed} colorVar="--primary" />
           <div className="flex items-center gap-3">
             <div className="relative">
               <PipelineNode
                 icon={Database}
                 label="Firestore"
                 sublabel={`${successCount.toLocaleString()} written${errorCount > 0 ? ` · ${errorCount}✗` : ""}`}
-                colorVar="--step-import"
+                colorVar="--primary"
                 pulsing={isRunning}
               />
               {isDone && (
                 <div className="absolute -right-1 -top-1 animate-scale-in">
                   <div className="rounded-full bg-background p-0.5 shadow-md">
-                    <CheckCircle2 className="h-5 w-5" style={{ color: "hsl(var(--step-import))" }} />
+                    <CheckCircle2 className="h-5 w-5 text-primary" />
                   </div>
                 </div>
               )}
@@ -147,7 +147,7 @@ function RowsPerSecGauge({ value }: { value: number }) {
           cy="28"
           r={radius}
           fill="none"
-          stroke="hsl(var(--step-import))"
+          stroke="hsl(var(--primary))"
           strokeWidth="4"
           strokeLinecap="round"
           strokeDasharray={circ}
