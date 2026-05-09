@@ -62,7 +62,7 @@ function MapNodeRow(props: Props & { node: MapNode }) {
   return (
     <div className="group/map">
       <div
-        className="flex items-center gap-2 rounded-md py-1.5 pr-2 transition-colors hover:bg-muted/40"
+        className="flex items-center gap-2 rounded-md py-1.5 pr-2 transition-colors hover:bg-muted/50"
         style={{ paddingLeft: 8 + depth * 18 }}
       >
         <button
@@ -112,7 +112,7 @@ function MapNodeRow(props: Props & { node: MapNode }) {
             <FieldTreeNode key={child.id} {...props} node={child} depth={depth + 1} />
           ))}
           <div className="flex gap-1 py-1" style={{ paddingLeft: 8 + (depth + 1) * 18 }}>
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px] text-primary hover:bg-primary/5 hover:text-primary" onClick={() => onAddChild(node.id)}>
+            <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px] text-foreground hover:bg-muted" onClick={() => onAddChild(node.id)}>
               <Plus className="mr-1 h-3 w-3" /> Add field
             </Button>
             <Button variant="ghost" size="sm" className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground" onClick={() => onAddChildMap(node.id)}>
@@ -148,8 +148,8 @@ function LeafNodeRow(props: Props & { node: LeafNode }) {
   return (
     <div
       className={cn(
-        "group/leaf flex items-center gap-2 rounded-md border border-transparent py-1 pr-2 transition-colors hover:bg-muted/30",
-        dragOver && "border-primary/60 bg-primary/5",
+        "group/leaf flex items-center gap-2 rounded-md border border-transparent py-1 pr-2 transition-colors hover:bg-muted/40",
+        dragOver && "border-foreground/25 bg-muted/60",
       )}
       style={{ paddingLeft: 8 + depth * 18 }}
       onDragOver={(e) => {
@@ -173,7 +173,14 @@ function LeafNodeRow(props: Props & { node: LeafNode }) {
 
       <Select
         value={node.firestoreType}
-        onValueChange={(v) => onLeafChange(node.id, { firestoreType: v as FirestoreType, typeLocked: true })}
+        onValueChange={(v) => {
+          const ft = v as FirestoreType;
+          onLeafChange(node.id, {
+            firestoreType: ft,
+            typeLocked: true,
+            imageMode: ft === "image" ? (node.imageMode ?? "passthrough") : undefined,
+          });
+        }}
       >
         <SelectTrigger className="h-7 w-28 border-transparent px-1.5 text-[11px] hover:border-border">
           <SelectValue />
@@ -190,7 +197,7 @@ function LeafNodeRow(props: Props & { node: LeafNode }) {
         size="icon"
         className={cn(
           "h-6 w-6",
-          node.typeLocked ? "text-primary hover:text-primary" : "text-muted-foreground/60 hover:text-foreground",
+          node.typeLocked ? "text-foreground" : "text-muted-foreground/60 hover:text-foreground",
         )}
         onClick={() => onLeafChange(node.id, { typeLocked: !node.typeLocked })}
         title={node.typeLocked ? "Type is locked — won't change on column drop" : "Type is auto (follows dropped column)"}
@@ -210,6 +217,21 @@ function LeafNodeRow(props: Props & { node: LeafNode }) {
             <SelectItem value="string" className="text-xs">of String</SelectItem>
             <SelectItem value="number" className="text-xs">of Number</SelectItem>
             <SelectItem value="boolean" className="text-xs">of Boolean</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
+
+      {node.firestoreType === "image" && (
+        <Select
+          value={node.imageMode ?? "passthrough"}
+          onValueChange={(v) => onLeafChange(node.id, { imageMode: v as "passthrough" | "upload" })}
+        >
+          <SelectTrigger className="h-7 w-[132px] border-transparent px-1.5 text-[11px] hover:border-border">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="passthrough" className="text-xs">Use URL as stored</SelectItem>
+            <SelectItem value="upload" className="text-xs">Upload to Storage</SelectItem>
           </SelectContent>
         </Select>
       )}
@@ -306,7 +328,7 @@ function SourceEditor({
         </div>
       )}
       {source.kind === "now" && (
-        <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 font-mono text-[11px] text-primary">
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2 py-0.5 font-mono text-[11px] text-foreground">
           <Clock className="h-3 w-3" />
           <span>serverTimestamp() — set at write time</span>
         </div>
@@ -329,20 +351,20 @@ function SourceEditor({
 function ColumnBinding({ column, sample, onUnbind }: { column: string; sample: unknown; onUnbind: () => void }) {
   if (!column) {
     return (
-      <div className="flex-1 rounded border border-dashed border-primary/40 px-2 py-1 text-[11px] italic text-primary/70">
+      <div className="flex-1 rounded border border-dashed border-muted-foreground/35 px-2 py-1 text-[11px] italic text-muted-foreground">
         drop a CSV column here
       </div>
     );
   }
   const sampleStr = sample === null || sample === undefined || sample === "" ? "" : String(sample);
   return (
-    <div className="inline-flex items-center gap-1.5 rounded-full border border-primary/35 bg-primary/10 px-2 py-0.5 font-mono text-[11px] text-primary">
+    <div className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted px-2 py-0.5 font-mono text-[11px] text-foreground">
       <Columns3 className="h-3 w-3" />
       <span className="truncate max-w-[160px]">{column}</span>
       {sampleStr && (
-        <span className="hidden truncate max-w-[120px] text-primary/70 md:inline">· {sampleStr.length > 20 ? sampleStr.slice(0, 20) + "…" : sampleStr}</span>
+        <span className="hidden truncate max-w-[120px] text-muted-foreground md:inline">· {sampleStr.length > 20 ? sampleStr.slice(0, 20) + "…" : sampleStr}</span>
       )}
-      <button onClick={onUnbind} className="rounded-full p-0.5 hover:bg-primary/15" aria-label="Unbind">
+      <button onClick={onUnbind} className="rounded-full p-0.5 hover:bg-background/80" aria-label="Unbind">
         <X className="h-3 w-3" />
       </button>
     </div>
@@ -351,12 +373,12 @@ function ColumnBinding({ column, sample, onUnbind }: { column: string; sample: u
 
 function SourceKindIcon({ kind }: { kind: Source["kind"] }) {
   switch (kind) {
-    case "column": return <Columns3 className="h-3.5 w-3.5 text-primary" />;
-    case "fixed": return <Lock className="h-3.5 w-3.5 text-primary" />;
-    case "autoIncrement": return <Hash className="h-3.5 w-3.5 text-primary" />;
-    case "now": return <Clock className="h-3.5 w-3.5 text-primary" />;
-    case "refQuery": return <Link2 className="h-3.5 w-3.5 text-primary" />;
-    case "refManual": return <Link className="h-3.5 w-3.5 text-primary" />;
+    case "column": return <Columns3 className="h-3.5 w-3.5 text-foreground" />;
+    case "fixed": return <Lock className="h-3.5 w-3.5 text-foreground" />;
+    case "autoIncrement": return <Hash className="h-3.5 w-3.5 text-foreground" />;
+    case "now": return <Clock className="h-3.5 w-3.5 text-foreground" />;
+    case "refQuery": return <Link2 className="h-3.5 w-3.5 text-foreground" />;
+    case "refManual": return <Link className="h-3.5 w-3.5 text-foreground" />;
     default: return <MinusCircle className="h-3.5 w-3.5 text-muted-foreground" />;
   }
 }
@@ -376,7 +398,7 @@ function RefQueryEditor({
   const valFrom = source.matchSource;
 
   return (
-    <div className="flex flex-1 flex-wrap items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 font-mono text-[11px]">
+    <div className="flex flex-1 flex-wrap items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 font-mono text-[11px]">
       <span className="text-muted-foreground">ref →</span>
       {collectionNames.length > 0 ? (
         <Select value={source.collection} onValueChange={(v) => onChange({ ...source, collection: v })}>
@@ -470,7 +492,7 @@ function RefManualEditor({
   const looksLikePath = sampleStr.includes("/");
 
   return (
-    <div className="flex flex-1 flex-wrap items-center gap-1.5 rounded-md border border-primary/30 bg-primary/5 px-2 py-1 font-mono text-[11px]">
+    <div className="flex flex-1 flex-wrap items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 font-mono text-[11px]">
       <span className="text-muted-foreground">ref ←</span>
       <Select value={source.column} onValueChange={(v) => onChange({ ...source, column: v })}>
         <SelectTrigger className="h-6 w-32 border-border/60 bg-background px-1.5 text-[11px]">

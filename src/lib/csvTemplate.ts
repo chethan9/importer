@@ -45,6 +45,7 @@ function placeholderFor(type: FirestoreFieldType): string {
     case "map": return "{}";
     case "null": return "";
     case "bytes": return "";
+    case "image": return "https://example.com/image.jpg";
     default: return "";
   }
 }

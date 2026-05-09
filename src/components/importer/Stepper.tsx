@@ -23,8 +23,10 @@ export function Stepper({ current, connected }: Props) {
             <div
               className={cn(
                 "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[11px] font-medium shadow-sm transition-all duration-200",
-                isDone && "border-primary bg-primary text-primary-foreground",
-                isActive && !isDone && "border-primary bg-primary text-primary-foreground ring-2 ring-primary/25 ring-offset-2 ring-offset-background",
+                isDone && "border-emerald-600/90 bg-emerald-600 text-white dark:bg-emerald-700 dark:border-emerald-700",
+                isActive &&
+                  !isDone &&
+                  "border-foreground bg-foreground text-background ring-2 ring-border ring-offset-2 ring-offset-background",
                 !isActive && !isDone && "border-border bg-muted/80 text-muted-foreground",
               )}
             >

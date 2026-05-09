@@ -15,7 +15,7 @@ type Props = {
 };
 
 type PreviewValue =
-  | { kind: "primitive"; display: string; typeLabel: string; tone: "string" | "number" | "boolean" | "null" | "timestamp" | "geopoint" | "reference" | "bytes" }
+  | { kind: "primitive"; display: string; typeLabel: string; tone: "string" | "number" | "boolean" | "null" | "timestamp" | "geopoint" | "reference" | "bytes" | "image" }
   | { kind: "array"; items: PreviewValue[] }
   | { kind: "map"; entries: Array<{ name: string; value: PreviewValue }> }
   | { kind: "error"; message: string };
@@ -151,6 +151,7 @@ function toneClass(tone: string): string {
     case "geopoint": return "text-pink-300";
     case "reference": return "text-cyan-300";
     case "bytes": return "text-orange-300";
+    case "image": return "text-zinc-200";
     default: return "text-zinc-500";
   }
 }
@@ -189,6 +190,19 @@ function buildPreviewValue(node: FieldNode, row: Record<string, unknown>, rowInd
   }
 
   const raw = resolveSource(node.source, row, rowIndex);
+
+  if (node.firestoreType === "image" && node.imageMode === "upload") {
+    const res = coerceValue(raw, "image", { db, arrayElementType: node.arrayElementType });
+    if (res.ok === false) return { kind: "error", message: res.error };
+    const url = res.value === null ? "" : String(res.value);
+    if (!url) return { kind: "primitive", display: "(empty)", typeLabel: "image", tone: "image" };
+    return {
+      kind: "primitive",
+      display: `${url} → Storage URL on import`,
+      typeLabel: "image",
+      tone: "image",
+    };
+  }
 
   if (!db) {
     const fallback = raw === null || raw === undefined ? "(null)" : String(raw);
@@ -248,6 +262,9 @@ function renderCoerced(value: unknown, type: string, elType?: string): PreviewVa
   }
   if (type === "bytes") {
     return { kind: "primitive", display: "‹bytes›", typeLabel: "bytes", tone: "bytes" };
+  }
+  if (type === "image") {
+    return { kind: "primitive", display: `"${String(value)}"`, typeLabel: "image", tone: "image" };
   }
   return { kind: "primitive", display: `"${String(value)}"`, typeLabel: "string", tone: "string" };
 }

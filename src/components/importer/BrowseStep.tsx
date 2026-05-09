@@ -36,11 +36,12 @@ const TYPE_COLORS: Record<FirestoreFieldType, string> = {
   boolean: "bg-amber-500/10 text-amber-700 ring-amber-500/20",
   timestamp: "bg-sky-500/10 text-sky-700 ring-sky-500/20",
   geopoint: "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20",
-  reference: "bg-primary/10 text-primary ring-primary/20",
+  reference: "bg-emerald-500/10 text-emerald-800 ring-emerald-500/20 dark:text-emerald-300",
   array: "bg-fuchsia-500/10 text-fuchsia-700 ring-fuchsia-500/20",
   map: "bg-indigo-500/10 text-indigo-700 ring-indigo-500/20",
   null: "bg-muted text-muted-foreground ring-border",
   bytes: "bg-slate-500/10 text-slate-700 ring-slate-500/20",
+  image: "bg-stone-500/10 text-stone-800 ring-stone-500/25",
 };
 
 export function BrowseStep() {
@@ -178,7 +179,7 @@ export function BrowseStep() {
           <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
-                <FileCode2 className="h-4 w-4 text-primary" />
+                <FileCode2 className="h-4 w-4 text-foreground" />
                 <CardTitle className="font-mono text-lg">{selected.name}</CardTitle>
                 <Badge variant="outline" className="font-mono text-[10px]">
                   {selected.docCount} sampled
@@ -261,8 +262,8 @@ function CollectionCard({
       className={cn(
         "group relative rounded-xl border bg-card p-4 text-left transition-all hover:shadow-md",
         selected
-          ? "border-primary shadow-sm ring-2 ring-primary/20"
-          : "border-border hover:border-primary/40",
+          ? "border-foreground/40 shadow-sm ring-2 ring-border"
+          : "border-border hover:border-foreground/25",
       )}
     >
       <div className="flex items-start justify-between gap-2">
@@ -275,7 +276,7 @@ function CollectionCard({
         <div className="flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
           <span
             onClick={(e) => { e.stopPropagation(); if (!templateLoading) onDownloadTemplate(); }}
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-primary"
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
             role="button"
             aria-label="Download CSV template"
             title="Download CSV template"

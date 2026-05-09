@@ -10,12 +10,15 @@ export type FirestoreType =
   | "array"
   | "map"
   | "null"
-  | "bytes";
+  | "bytes"
+  /** Stored as a string URL in Firestore; optional import-time upload to Storage */
+  | "image";
 
 export type ArrayElementType = "string" | "number" | "boolean";
 
 export const FIRESTORE_TYPES: { value: FirestoreType; label: string; hint: string }[] = [
   { value: "string", label: "String", hint: "Any text" },
+  { value: "image", label: "Image URL", hint: "HTTP(S), including Drive share links — upload yields Storage token URL" },
   { value: "number", label: "Number", hint: "Integer or decimal" },
   { value: "boolean", label: "Boolean", hint: "true / false / 1 / 0 / yes / no" },
   { value: "timestamp", label: "Timestamp", hint: "ISO 8601 date or millis since epoch" },
@@ -52,6 +55,19 @@ export function coerceValue(
     switch (type) {
       case "string":
         return { ok: true, value: String(s) };
+
+      case "image": {
+        const urlStr = String(s).trim();
+        if (!/^https?:\/\//i.test(urlStr)) {
+          return { ok: false, error: `Image field expects an http(s) URL, got "${raw}"` };
+        }
+        try {
+          new URL(urlStr);
+        } catch {
+          return { ok: false, error: `Invalid URL: "${raw}"` };
+        }
+        return { ok: true, value: urlStr };
+      }
 
       case "number": {
         if (typeof s === "number") return { ok: true, value: s };
@@ -170,6 +186,7 @@ export function inferType(value: unknown): FirestoreType {
     if (/^(true|false)$/i.test(s)) return "boolean";
     if (/^-?\d+(\.\d+)?$/.test(s) && s.length < 15) return "number";
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) return "timestamp";
+    if (/^https?:\/\/.+/i.test(s) && /\.(jpg|jpeg|png|gif|webp|svg|avif)(\?|$)/i.test(s)) return "image";
     return "string";
   }
   if (typeof value === "object") return "map";
@@ -182,7 +199,7 @@ export function inferTypeFromSamples(values: unknown[]): FirestoreType {
 
   const votes: Record<FirestoreType, number> = {
     string: 0, number: 0, boolean: 0, timestamp: 0, geopoint: 0,
-    reference: 0, array: 0, map: 0, null: 0, bytes: 0,
+    reference: 0, array: 0, map: 0, null: 0, bytes: 0, image: 0,
   };
 
   for (const v of nonBlank) {
@@ -197,11 +214,12 @@ export function inferTypeFromSamples(values: unknown[]): FirestoreType {
     if (/^-?\d{1,3}(\.\d+)?\s*,\s*-?\d{1,3}(\.\d+)?$/.test(s)) { votes.geopoint++; continue; }
     if (s.startsWith("[") && s.endsWith("]")) { votes.array++; continue; }
     if (s.startsWith("{") && s.endsWith("}")) { votes.map++; continue; }
+    if (/^https?:\/\/.+/i.test(s) && /\.(jpg|jpeg|png|gif|webp|svg|avif)(\?|$)/i.test(s)) { votes.image++; continue; }
     votes.string++;
   }
 
   const threshold = nonBlank.length * 0.8;
-  const priority: FirestoreType[] = ["boolean", "number", "timestamp", "geopoint", "array", "map", "string"];
+  const priority: FirestoreType[] = ["boolean", "number", "timestamp", "geopoint", "array", "map", "image", "string"];
   for (const t of priority) {
     if (votes[t] >= threshold) return t;
   }

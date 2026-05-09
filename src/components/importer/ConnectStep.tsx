@@ -124,8 +124,8 @@ export function ConnectStep() {
   return (
     <div className="mx-auto w-full max-w-3xl animate-fade-in-up space-y-6 px-4 pb-20 sm:px-6">
       {connected && activeConfig && (
-        <Alert className="border-primary/25 bg-primary/[0.06]">
-          <CheckCircle2 className="h-4 w-4 text-primary" />
+        <Alert className="border-emerald-500/35 bg-emerald-500/[0.08] dark:bg-emerald-500/[0.12]">
+          <CheckCircle2 className="h-4 w-4 text-emerald-700 dark:text-emerald-400" />
           <AlertDescription className="flex items-center justify-between gap-2">
             <span>Connected to <code className="font-mono text-xs">{activeConfig.projectId}</code></span>
             <Badge variant="outline" className="font-mono text-[10px]">ready</Badge>

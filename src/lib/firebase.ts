@@ -30,7 +30,8 @@ export type FirestoreFieldType =
   | "array"
   | "map"
   | "null"
-  | "bytes";
+  | "bytes"
+  | "image";
 
 export type FieldSchema = {
   name: string;
@@ -47,7 +48,11 @@ export function detectType(v: unknown): FirestoreFieldType {
   if (v instanceof Uint8Array) return "bytes";
   if (Array.isArray(v)) return "array";
   const t = typeof v;
-  if (t === "string") return "string";
+  if (t === "string") {
+    const u = String(v).trim();
+    if (/^https?:\/\/.+/i.test(u) && /\.(jpg|jpeg|png|gif|webp|svg|avif)(\?|$)/i.test(u)) return "image";
+    return "string";
+  }
   if (t === "number") return "number";
   if (t === "boolean") return "boolean";
   if (t === "object") return "map";

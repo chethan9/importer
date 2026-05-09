@@ -31,6 +31,8 @@ export type LeafNode = {
   id: string;
   name: string;
   firestoreType: FirestoreType;
+  /** When firestoreType is "image": store URL as-is or fetch + upload to Storage */
+  imageMode?: "passthrough" | "upload";
   arrayElementType?: ArrayElementType;
   source: Source;
   typeLocked?: boolean;
@@ -57,7 +59,8 @@ export function makeLeaf(
   source: Source = { kind: "skip" },
   arrayElementType?: ArrayElementType,
 ): LeafNode {
-  return { kind: "leaf", id: newId(), name, firestoreType, source, arrayElementType };
+  const imageMode = firestoreType === "image" ? "passthrough" : undefined;
+  return { kind: "leaf", id: newId(), name, firestoreType, imageMode, source, arrayElementType };
 }
 
 export function makeMap(name: string, children: FieldNode[] = []): MapNode {
@@ -274,6 +277,15 @@ export function buildRowData(
     }
 
     const raw = resolveSource(node.source, row, rowIndex);
+
+    if (node.firestoreType === "image" && node.imageMode === "upload") {
+      const res = coerceValue(raw, "image", { db, arrayElementType: node.arrayElementType });
+      if (res.ok === false) { errors.push({ field: path, message: res.error }); continue; }
+      if (res.value === null) continue;
+      data[name] = { __type: "pendingImageUpload", url: res.value as string };
+      continue;
+    }
+
     const res = coerceValue(raw, node.firestoreType, { db, arrayElementType: node.arrayElementType });
     if (res.ok === false) { errors.push({ field: path, message: res.error }); continue; }
     if (res.value !== null || node.firestoreType === "null") data[name] = res.value;

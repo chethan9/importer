@@ -99,7 +99,7 @@ export function UploadStep({ value, onChange, onBack, onNext, collectionName }: 
         <Card
           className={cn(
             "border-2 border-dashed border-border/80 transition-all",
-            isDragging && "scale-[1.01] border-primary/45 bg-primary/[0.04]",
+            isDragging && "scale-[1.01] border-foreground/20 bg-muted/60",
           )}
           onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
           onDragLeave={() => setIsDragging(false)}
@@ -111,7 +111,7 @@ export function UploadStep({ value, onChange, onBack, onNext, collectionName }: 
           }}
         >
           <CardContent className="flex flex-col items-center gap-4 py-12 text-center sm:py-16">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-foreground text-background shadow-md">
               <FileSpreadsheet className="h-7 w-7" />
             </div>
             <div>
@@ -142,7 +142,7 @@ export function UploadStep({ value, onChange, onBack, onNext, collectionName }: 
         <Card>
           <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-foreground text-background shadow-sm">
                 <FileSpreadsheet className="h-5 w-5" />
               </div>
               <div className="min-w-0">

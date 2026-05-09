@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { FirebaseApp } from "firebase/app";
 import {
   collection as fsCollection,
   doc as fsDoc,
@@ -28,6 +29,8 @@ import { useFirebase } from "@/contexts/FirebaseContext";
 import type { ParsedFile } from "./UploadStep";
 import type { MappingConfig } from "./MappingStep";
 import { buildRowData, collectRefQueryLookups, resolveRefQueries, parseManualRefPath } from "@/lib/mappingTree";
+import type { FirebaseConfig } from "@/lib/firebase";
+import { resolvePendingImagesInRecord, dataContainsPendingUploads } from "@/lib/imageImport";
 import { coerceValue, toAdminJSON } from "@/lib/coerce";
 import {
   createImportRecord,
@@ -66,7 +69,7 @@ const BATCH_SIZE = 400;
 type LiveResult = { rowIndex: number; docId: string; docPath: string };
 
 export function ImportStep({ file, collectionName, config, onBack, onReset, onOpenHistory, resumeInfo }: Props) {
-  const { db, config: fbConfig, authMode, serviceAccount } = useFirebase();
+  const { db, config: fbConfig, authMode, serviceAccount, app: firebaseApp } = useFirebase();
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(0);
@@ -207,7 +210,18 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
       try {
         result = authMode === "admin" && serviceAccount
           ? await processBatchAdmin(serviceAccount, collectionName, slice, batchStart, config, localErrors, refCache)
-          : await processBatch(db!, collectionName, slice, batchStart, config, localErrors, refCache as never);
+          : await processBatch(
+              db!,
+              collectionName,
+              slice,
+              batchStart,
+              config,
+              localErrors,
+              refCache as never,
+              firebaseApp && fbConfig
+                ? { app: firebaseApp, fbConfig }
+                : undefined,
+            );
       } catch (err) {
         const reason = err instanceof Error ? err.message : "Unknown network/Firestore error";
         await pauseImport(activeImportId, reason, batchStart, localSuccess, localErrors.length, failedRows);
@@ -560,6 +574,7 @@ async function processBatch(
   config: MappingConfig,
   errors: ImportErrorEntry[],
   refCache: Parameters<typeof buildRowData>[4],
+  imageOpts?: { app: FirebaseApp; fbConfig: FirebaseConfig },
 ): Promise<{ written: WrittenDoc[] }> {
   const colRef = fsCollection(db, collectionName);
   const batch = writeBatch(db);
@@ -572,6 +587,30 @@ async function processBatch(
     if (rowErrors.length > 0) {
       rowErrors.forEach((e) => errors.push({ rowIndex, field: e.field, message: e.message }));
       continue;
+    }
+
+    if (dataContainsPendingUploads(data)) {
+      if (!imageOpts) {
+        errors.push({
+          rowIndex,
+          message: "Image upload requires an active web Firebase connection (Storage). Reconnect or use passthrough mode.",
+        });
+        continue;
+      }
+      try {
+        await resolvePendingImagesInRecord(data, {
+          authMode: "web",
+          app: imageOpts.app,
+          fbConfig: imageOpts.fbConfig,
+          serviceAccount: null,
+        });
+      } catch (err) {
+        errors.push({
+          rowIndex,
+          message: err instanceof Error ? err.message : "Image upload failed",
+        });
+        continue;
+      }
     }
 
     let docRef;
@@ -704,6 +743,14 @@ async function processBatchAdmin(
           continue;
         }
 
+        if (node.firestoreType === "image" && node.imageMode === "upload") {
+          const resImg = coerceValue(raw, "image", { arrayElementType: node.arrayElementType });
+          if (resImg.ok === false) { rowErrs.push({ field: name, message: resImg.error }); continue; }
+          if (resImg.value === null) continue;
+          target[name] = { __type: "pendingImageUpload", url: resImg.value as string };
+          continue;
+        }
+
         const res = coerceValue(raw, node.firestoreType, { arrayElementType: node.arrayElementType });
         if (res.ok === false) { rowErrs.push({ field: name, message: res.error }); continue; }
         if (res.value !== null || node.firestoreType === "null") target[name] = toAdminJSON(res.value);
@@ -712,6 +759,21 @@ async function processBatchAdmin(
     walk(config.tree, data);
 
     if (rowErrs.length > 0) { rowErrs.forEach((e) => errors.push({ rowIndex, field: e.field, message: e.message })); continue; }
+
+    try {
+      await resolvePendingImagesInRecord(data, {
+        authMode: "admin",
+        app: null,
+        fbConfig: null,
+        serviceAccount: sa,
+      });
+    } catch (err) {
+      errors.push({
+        rowIndex,
+        message: err instanceof Error ? err.message : "Image upload failed",
+      });
+      continue;
+    }
 
     let docId: string | undefined;
     if (config.docIdStrategy.kind === "column") {

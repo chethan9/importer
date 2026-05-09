@@ -342,7 +342,7 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
                     onClick={() => setMode("create")}
                     className={cn(
                       "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-                      mode === "create" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                      mode === "create" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
                     Create new
@@ -357,7 +357,7 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
                     onClick={() => setMode("merge")}
                     className={cn(
                       "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-                      mode === "merge" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                      mode === "merge" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
                     Merge / upsert
@@ -378,7 +378,7 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
                 onClick={() => setDocIdStrategy({ kind: "auto" })}
                 className={cn(
                   "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-                  docIdStrategy.kind === "auto" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                  docIdStrategy.kind === "auto" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 Auto
@@ -388,7 +388,7 @@ export function MappingStep({ file, collection, value, onChange, onBack, onNext 
                 onClick={() => setDocIdStrategy({ kind: "column", column: docIdStrategy.kind === "column" ? docIdStrategy.column : (file.columns[0] ?? "") })}
                 className={cn(
                   "rounded px-2.5 py-1 text-xs font-medium transition-colors",
-                  docIdStrategy.kind === "column" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                  docIdStrategy.kind === "column" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 From column
