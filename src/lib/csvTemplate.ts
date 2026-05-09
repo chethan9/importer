@@ -36,6 +36,7 @@ function serializeValue(v: unknown): string {
 function placeholderFor(type: FirestoreFieldType): string {
   switch (type) {
     case "string": return "sample text";
+    case "string_url": return "https://drive.google.com/file/d/…/view";
     case "number": return "0";
     case "boolean": return "false";
     case "timestamp": return new Date().toISOString();

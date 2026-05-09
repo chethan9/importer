@@ -2,6 +2,8 @@ import { Timestamp, GeoPoint, Bytes, doc, Firestore, DocumentReference } from "f
 
 export type FirestoreType =
   | "string"
+  /** Same storage as string — use for URLs you want saved verbatim (e.g. Drive); never downloads or uploads */
+  | "string_url"
   | "number"
   | "boolean"
   | "timestamp"
@@ -17,13 +19,22 @@ export type FirestoreType =
 export type ArrayElementType = "string" | "number" | "boolean";
 
 export const FIRESTORE_TYPES: { value: FirestoreType; label: string; hint: string }[] = [
-  { value: "string", label: "String", hint: "Any text" },
-  { value: "image", label: "Image URL", hint: "HTTP(S), including Drive share links — upload yields Storage token URL" },
+  { value: "string", label: "String", hint: "Any text (not treated as an image)" },
+  {
+    value: "string_url",
+    label: "String (URL as text)",
+    hint: "HTTP(S) saved exactly as in the sheet — no Storage fetch or upload",
+  },
+  {
+    value: "image",
+    label: "Image URL",
+    hint: "HTTP(S) URL; choose “Upload to Storage” only if you want a Firebase download URL",
+  },
   { value: "number", label: "Number", hint: "Integer or decimal" },
   { value: "boolean", label: "Boolean", hint: "true / false / 1 / 0 / yes / no" },
   { value: "timestamp", label: "Timestamp", hint: "ISO 8601 date or millis since epoch" },
   { value: "geopoint", label: "GeoPoint", hint: "Format: lat,lng" },
-  { value: "reference", label: "Reference", hint: "Doc path: collection/docId" },
+  { value: "reference", label: "Reference", hint: "Only Firestore paths (e.g. coll/docId) — never http(s) web URLs" },
   { value: "array", label: "Array", hint: "JSON array or comma-separated values" },
   { value: "map", label: "Map (object)", hint: "JSON object" },
   { value: "null", label: "Null", hint: "Always stored as null" },
@@ -54,6 +65,7 @@ export function coerceValue(
   try {
     switch (type) {
       case "string":
+      case "string_url":
         return { ok: true, value: String(s) };
 
       case "image": {
@@ -114,10 +126,18 @@ export function coerceValue(
       case "reference": {
         if (!opts.db) return { ok: false, error: "Firestore not initialized" };
         const path = String(s).trim().replace(/^\/+|\/+$/g, "");
-        const segments = path.split("/");
+        if (/^https?:\/\//i.test(path)) {
+          return {
+            ok: false,
+            error:
+              "Web URLs cannot use type Reference. Use String, String (URL as text), or Image URL (with optional Upload to Storage).",
+          };
+        }
+        const segments = path.split("/").filter((seg) => seg.length > 0);
         if (segments.length < 2 || segments.length % 2 !== 0)
           return { ok: false, error: `Reference must be "collection/docId", got "${raw}"` };
-        const ref: DocumentReference = doc(opts.db, path);
+        const fullPath = segments.join("/");
+        const ref: DocumentReference = doc(opts.db, fullPath);
         return { ok: true, value: ref };
       }
 
@@ -186,7 +206,10 @@ export function inferType(value: unknown): FirestoreType {
     if (/^(true|false)$/i.test(s)) return "boolean";
     if (/^-?\d+(\.\d+)?$/.test(s) && s.length < 15) return "number";
     if (/^\d{4}-\d{2}-\d{2}/.test(s)) return "timestamp";
-    if (/^https?:\/\/.+/i.test(s) && /\.(jpg|jpeg|png|gif|webp|svg|avif)(\?|$)/i.test(s)) return "image";
+    if (/^https?:\/\/.+/i.test(s)) {
+      if (/\.(jpg|jpeg|png|gif|webp|svg|avif)(\?|$)/i.test(s)) return "image";
+      return "string_url";
+    }
     return "string";
   }
   if (typeof value === "object") return "map";
@@ -198,8 +221,18 @@ export function inferTypeFromSamples(values: unknown[]): FirestoreType {
   if (nonBlank.length === 0) return "string";
 
   const votes: Record<FirestoreType, number> = {
-    string: 0, number: 0, boolean: 0, timestamp: 0, geopoint: 0,
-    reference: 0, array: 0, map: 0, null: 0, bytes: 0, image: 0,
+    string: 0,
+    string_url: 0,
+    number: 0,
+    boolean: 0,
+    timestamp: 0,
+    geopoint: 0,
+    reference: 0,
+    array: 0,
+    map: 0,
+    null: 0,
+    bytes: 0,
+    image: 0,
   };
 
   for (const v of nonBlank) {
@@ -214,12 +247,29 @@ export function inferTypeFromSamples(values: unknown[]): FirestoreType {
     if (/^-?\d{1,3}(\.\d+)?\s*,\s*-?\d{1,3}(\.\d+)?$/.test(s)) { votes.geopoint++; continue; }
     if (s.startsWith("[") && s.endsWith("]")) { votes.array++; continue; }
     if (s.startsWith("{") && s.endsWith("}")) { votes.map++; continue; }
-    if (/^https?:\/\/.+/i.test(s) && /\.(jpg|jpeg|png|gif|webp|svg|avif)(\?|$)/i.test(s)) { votes.image++; continue; }
+    if (/^https?:\/\/.+/i.test(s)) {
+      if (/\.(jpg|jpeg|png|gif|webp|svg|avif)(\?|$)/i.test(s)) {
+        votes.image++;
+      } else {
+        votes.string_url++;
+      }
+      continue;
+    }
     votes.string++;
   }
 
   const threshold = nonBlank.length * 0.8;
-  const priority: FirestoreType[] = ["boolean", "number", "timestamp", "geopoint", "array", "map", "image", "string"];
+  const priority: FirestoreType[] = [
+    "boolean",
+    "number",
+    "timestamp",
+    "geopoint",
+    "array",
+    "map",
+    "image",
+    "string_url",
+    "string",
+  ];
   for (const t of priority) {
     if (votes[t] >= threshold) return t;
   }
@@ -254,4 +304,10 @@ export function toAdminJSON(value: unknown): unknown {
     return out;
   }
   return value;
+}
+
+/** Short UI label for type dropdowns and column chips */
+export function labelForFirestoreType(t: FirestoreType): string {
+  const row = FIRESTORE_TYPES.find((x) => x.value === t);
+  return row?.label ?? t;
 }

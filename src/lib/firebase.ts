@@ -22,6 +22,7 @@ export type FirebaseConfig = {
 
 export type FirestoreFieldType =
   | "string"
+  | "string_url"
   | "number"
   | "boolean"
   | "timestamp"
@@ -50,7 +51,10 @@ export function detectType(v: unknown): FirestoreFieldType {
   const t = typeof v;
   if (t === "string") {
     const u = String(v).trim();
-    if (/^https?:\/\/.+/i.test(u) && /\.(jpg|jpeg|png|gif|webp|svg|avif)(\?|$)/i.test(u)) return "image";
+    if (/^https?:\/\/.+/i.test(u)) {
+      if (/\.(jpg|jpeg|png|gif|webp|svg|avif)(\?|$)/i.test(u)) return "image";
+      return "string_url";
+    }
     return "string";
   }
   if (t === "number") return "number";

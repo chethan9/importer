@@ -1,6 +1,6 @@
 import { GripVertical, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { FirestoreType } from "@/lib/coerce";
+import { labelForFirestoreType, type FirestoreType } from "@/lib/coerce";
 
 type Props = {
   columns: string[];
@@ -88,8 +88,8 @@ function ColumnChip({
       <GripVertical className="h-3 w-3 opacity-60 group-hover:opacity-100" />
       <span className="truncate max-w-[140px]">{column}</span>
       {type && (
-        <span className="rounded bg-background/60 px-1 py-0.5 text-[9px] uppercase tracking-wide text-muted-foreground">
-          {type}
+        <span className="max-w-[120px] truncate rounded bg-background/60 px-1 py-0.5 text-[9px] tracking-wide text-muted-foreground">
+          {labelForFirestoreType(type)}
         </span>
       )}
       {bound && <Check className="h-3 w-3" />}

@@ -293,10 +293,21 @@ export function buildRowData(
   return { data, errors };
 }
 
+/** Web URLs must not be interpreted as Firestore paths (slashes look like collection/doc segments). */
+export function looksLikeHttpOrHttpsUrl(str: string): boolean {
+  return /^https?:\/\//i.test(str.trim());
+}
+
 export function parseManualRefPath(rawValue: unknown, baseCollection?: string): { path: string; segments: string[] } | { error: string } | null {
   if (rawValue === null || rawValue === undefined) return null;
   const str = String(rawValue).trim();
   if (!str) return null;
+  if (looksLikeHttpOrHttpsUrl(str)) {
+    return {
+      error:
+        "This value is a web URL, not a Firestore document path (collection/docId). Use type “String”, “String (URL as text)”, or “Image URL” — Reference is only for Firestore paths.",
+    };
+  }
   const cleaned = str.startsWith("/") ? str.slice(1) : str;
   if (cleaned.includes("/")) {
     const segments = cleaned.split("/").filter(Boolean);

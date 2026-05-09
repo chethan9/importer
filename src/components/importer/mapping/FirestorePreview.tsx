@@ -266,5 +266,8 @@ function renderCoerced(value: unknown, type: string, elType?: string): PreviewVa
   if (type === "image") {
     return { kind: "primitive", display: `"${String(value)}"`, typeLabel: "image", tone: "image" };
   }
+  if (type === "string_url") {
+    return { kind: "primitive", display: `"${String(value)}"`, typeLabel: "string (url)", tone: "string" };
+  }
   return { kind: "primitive", display: `"${String(value)}"`, typeLabel: "string", tone: "string" };
 }

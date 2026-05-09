@@ -32,6 +32,7 @@ import { collection as fsCollection, getDocs, query, limit as fsLimit } from "fi
 
 const TYPE_COLORS: Record<FirestoreFieldType, string> = {
   string: "bg-blue-500/10 text-blue-700 ring-blue-500/20",
+  string_url: "bg-sky-500/10 text-sky-800 ring-sky-500/20",
   number: "bg-violet-500/10 text-violet-700 ring-violet-500/20",
   boolean: "bg-amber-500/10 text-amber-700 ring-amber-500/20",
   timestamp: "bg-sky-500/10 text-sky-700 ring-sky-500/20",

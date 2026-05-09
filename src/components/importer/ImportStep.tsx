@@ -735,11 +735,20 @@ async function processBatchAdmin(
           const str = raw === null || raw === undefined ? "" : String(raw).trim();
           if (!str) continue;
           const cleaned = str.replace(/^\/+|\/+$/g, "");
-          if (cleaned.split("/").length < 2 || cleaned.split("/").length % 2 !== 0) {
+          if (/^https?:\/\//i.test(cleaned)) {
+            rowErrs.push({
+              field: name,
+              message:
+                `Reference type cannot store web URLs. Use String, String (URL as text), or Image URL — for Firebase Storage URLs choose Image URL + “Upload to Storage”.`,
+            });
+            continue;
+          }
+          const segments = cleaned.split("/").filter((s) => s.length > 0);
+          if (segments.length < 2 || segments.length % 2 !== 0) {
             rowErrs.push({ field: name, message: `Reference "${str}" must be a path like collection/docId` });
             continue;
           }
-          target[name] = { __type: "ref", path: cleaned };
+          target[name] = { __type: "ref", path: segments.join("/") };
           continue;
         }
 
