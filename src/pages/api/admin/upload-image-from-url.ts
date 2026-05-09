@@ -4,6 +4,7 @@ import { getStorage } from "firebase-admin/storage";
 import type { ServiceAccountJson } from "@/lib/firebaseAdmin";
 import { proxiedImageFetchUrl } from "@/lib/imageFetchProxy";
 import { resolveFetchableImageUrl } from "@/lib/imageSourceUrl";
+import { sanitizeStorageFolder } from "@/lib/storagePrefs";
 import { randomUUID } from "crypto";
 
 function extFromUrl(url: string, contentType: string): string {
@@ -27,7 +28,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    const { serviceAccount, url } = req.body as { serviceAccount: ServiceAccountJson; url: string };
+    const { serviceAccount, url, storageBucket, folder } = req.body as {
+      serviceAccount: ServiceAccountJson;
+      url: string;
+      storageBucket?: string;
+      folder?: string;
+    };
     if (!serviceAccount?.project_id || !serviceAccount.client_email || !serviceAccount.private_key) {
       return res.status(400).json({ error: "Invalid service account" });
     }
@@ -59,6 +65,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    const bucketId =
+      typeof storageBucket === "string" && storageBucket.trim()
+        ? storageBucket.trim()
+        : `${serviceAccount.project_id}.firebasestorage.app`;
+    const prefix = sanitizeStorageFolder(typeof folder === "string" ? folder : "imports");
+
     const appName = `img-upload-${Date.now()}-${randomUUID().slice(0, 8)}`;
     const app = initializeApp(
       {
@@ -68,15 +80,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           privateKey: serviceAccount.private_key.replace(/\\n/g, "\n"),
         }),
         projectId: serviceAccount.project_id,
-        storageBucket: `${serviceAccount.project_id}.appspot.com`,
       },
       appName,
     );
 
     try {
-      const bucket = getStorage(app).bucket();
+      const bucket = getStorage(app).bucket(bucketId);
       const ext = extFromUrl(src, contentType);
-      const objectPath = `imports/${Date.now()}_${randomUUID().slice(0, 8)}.${ext}`;
+      const objectPath = `${prefix}/${Date.now()}_${randomUUID().slice(0, 8)}.${ext}`;
       const token = randomUUID();
       const file = bucket.file(objectPath);
       await file.save(buf, {

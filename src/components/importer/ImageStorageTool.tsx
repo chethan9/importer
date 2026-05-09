@@ -23,7 +23,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 
 export function ImageStorageTool() {
-  const { connected, authMode, app, config, serviceAccount } = useFirebase();
+  const { connected, authMode, app, config, serviceAccount, projectId, storageBucketId, storageFolder } =
+    useFirebase();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [urlInput, setUrlInput] = useState("");
@@ -33,9 +34,7 @@ export function ImageStorageTool() {
   const [copied, setCopied] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const canUpload =
-    connected &&
-    (authMode === "admin" ? !!serviceAccount : !!(app && config?.projectId));
+  const canUpload = connected && (authMode === "admin" ? !!serviceAccount : !!(app && projectId));
 
   async function handleUrlUpload() {
     const raw = urlInput.trim();
@@ -51,10 +50,14 @@ export function ImageStorageTool() {
       let out: string;
       if (authMode === "admin") {
         if (!serviceAccount) throw new Error("Service account missing");
-        out = await uploadSourceUrlViaAdmin(serviceAccount, raw);
+        out = await uploadSourceUrlViaAdmin(serviceAccount, raw, {
+          storageBucket: storageBucketId,
+          folder: storageFolder,
+        });
       } else {
-        if (!app || !config?.projectId) throw new Error("Web Firebase connection missing");
-        out = await uploadSourceUrlViaWeb(app, config.storageBucket, config.projectId, raw);
+        if (!app || !projectId) throw new Error("Web Firebase connection missing");
+        const bucket = config?.storageBucket?.trim() || storageBucketId;
+        out = await uploadSourceUrlViaWeb(app, bucket, projectId, raw, storageFolder);
       }
       setResultUrl(out);
       toast({ title: "Image uploaded to Storage", description: "Copy the URL below into your CSV or Firestore field." });
@@ -77,10 +80,14 @@ export function ImageStorageTool() {
       let out: string;
       if (authMode === "admin") {
         if (!serviceAccount) throw new Error("Service account missing");
-        out = await uploadLocalFileViaAdmin(serviceAccount, file);
+        out = await uploadLocalFileViaAdmin(serviceAccount, file, {
+          storageBucket: storageBucketId,
+          folder: storageFolder,
+        });
       } else {
-        if (!app || !config?.projectId) throw new Error("Web Firebase connection missing");
-        out = await uploadLocalFileViaWeb(app, config.storageBucket, file);
+        if (!app || !projectId) throw new Error("Web Firebase connection missing");
+        const bucket = config?.storageBucket?.trim() || storageBucketId;
+        out = await uploadLocalFileViaWeb(app, bucket, projectId, file, storageFolder);
       }
       setResultUrl(out);
       toast({ title: "File uploaded to Storage" });

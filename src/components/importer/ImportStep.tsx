@@ -69,7 +69,15 @@ const BATCH_SIZE = 400;
 type LiveResult = { rowIndex: number; docId: string; docPath: string };
 
 export function ImportStep({ file, collectionName, config, onBack, onReset, onOpenHistory, resumeInfo }: Props) {
-  const { db, config: fbConfig, authMode, serviceAccount, app: firebaseApp } = useFirebase();
+  const {
+    db,
+    config: fbConfig,
+    authMode,
+    serviceAccount,
+    app: firebaseApp,
+    storageBucketId,
+    storageFolder,
+  } = useFirebase();
   const { toast } = useToast();
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState(0);
@@ -209,7 +217,17 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
       let result: { written: WrittenDoc[] };
       try {
         result = authMode === "admin" && serviceAccount
-          ? await processBatchAdmin(serviceAccount, collectionName, slice, batchStart, config, localErrors, refCache)
+          ? await processBatchAdmin(
+              serviceAccount,
+              collectionName,
+              slice,
+              batchStart,
+              config,
+              localErrors,
+              refCache,
+              storageBucketId,
+              storageFolder,
+            )
           : await processBatch(
               db!,
               collectionName,
@@ -219,7 +237,7 @@ export function ImportStep({ file, collectionName, config, onBack, onReset, onOp
               localErrors,
               refCache as never,
               firebaseApp && fbConfig
-                ? { app: firebaseApp, fbConfig }
+                ? { app: firebaseApp, fbConfig, storageBucket: storageBucketId, folder: storageFolder }
                 : undefined,
             );
       } catch (err) {
@@ -574,7 +592,7 @@ async function processBatch(
   config: MappingConfig,
   errors: ImportErrorEntry[],
   refCache: Parameters<typeof buildRowData>[4],
-  imageOpts?: { app: FirebaseApp; fbConfig: FirebaseConfig },
+  imageOpts?: { app: FirebaseApp; fbConfig: FirebaseConfig; storageBucket: string; folder: string },
 ): Promise<{ written: WrittenDoc[] }> {
   const colRef = fsCollection(db, collectionName);
   const batch = writeBatch(db);
@@ -603,6 +621,8 @@ async function processBatch(
           app: imageOpts.app,
           fbConfig: imageOpts.fbConfig,
           serviceAccount: null,
+          storageBucket: imageOpts.storageBucket,
+          storageFolder: imageOpts.folder,
         });
       } catch (err) {
         errors.push({
@@ -677,6 +697,8 @@ async function processBatchAdmin(
   config: MappingConfig,
   errors: ImportErrorEntry[],
   refCache: Map<string, unknown> | undefined,
+  storageBucketId: string,
+  storageFolder: string,
 ): Promise<{ written: WrittenDoc[] }> {
   const ops: Array<{ docId?: string; data: Record<string, unknown>; merge: boolean; rowIndex: number }> = [];
   const perOpMeta: Array<{ rowIndex: number; hasId: boolean }> = [];
@@ -775,6 +797,8 @@ async function processBatchAdmin(
         app: null,
         fbConfig: null,
         serviceAccount: sa,
+        storageBucket: storageBucketId,
+        storageFolder: storageFolder,
       });
     } catch (err) {
       errors.push({

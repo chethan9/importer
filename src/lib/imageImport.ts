@@ -4,6 +4,7 @@ import type { FirebaseConfig } from "@/lib/firebase";
 import type { ServiceAccount } from "@/services/adminFirestoreService";
 import { proxiedImageFetchUrl } from "@/lib/imageFetchProxy";
 import { resolveFetchableImageUrl } from "@/lib/imageSourceUrl";
+import { defaultBucketFromProjectId, sanitizeStorageFolder } from "@/lib/storagePrefs";
 
 export type PendingImageUploadMarker = { __type: "pendingImageUpload"; url: string };
 
@@ -51,13 +52,16 @@ async function fetchRemoteImage(url: string): Promise<{ bytes: Uint8Array; conte
 export async function uploadSourceUrlViaWeb(
   app: FirebaseApp,
   bucketHint: string | undefined,
-  _projectId: string,
+  projectId: string,
   sourceUrl: string,
+  folder = "imports",
 ): Promise<string> {
-  const storage = getWebStorage(app, bucketHint);
+  const bucketName = bucketHint?.trim() || defaultBucketFromProjectId(projectId);
+  const storage = getWebStorage(app, bucketName);
   const { bytes, contentType } = await fetchRemoteImage(sourceUrl);
   const ext = extensionFromUrl(sourceUrl, contentType);
-  const path = `imports/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
+  const prefix = sanitizeStorageFolder(folder);
+  const path = `${prefix}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
   const r = ref(storage, path);
   await uploadBytes(r, bytes, { contentType });
   return getDownloadURL(r);
@@ -66,11 +70,17 @@ export async function uploadSourceUrlViaWeb(
 export async function uploadSourceUrlViaAdmin(
   serviceAccount: ServiceAccount,
   sourceUrl: string,
+  opts?: { storageBucket?: string; folder?: string },
 ): Promise<string> {
   const res = await fetch("/api/admin/upload-image-from-url", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ serviceAccount, url: sourceUrl }),
+    body: JSON.stringify({
+      serviceAccount,
+      url: sourceUrl,
+      storageBucket: opts?.storageBucket,
+      folder: opts?.folder,
+    }),
   });
   const j = (await res.json()) as { downloadUrl?: string; error?: string };
   if (!res.ok) throw new Error(j.error || "Upload failed");
@@ -101,12 +111,16 @@ function readFileAsBase64(file: File): Promise<string> {
 export async function uploadLocalFileViaWeb(
   app: FirebaseApp,
   bucketHint: string | undefined,
+  projectId: string,
   file: File,
+  folder = "imports",
 ): Promise<string> {
-  const storage = getWebStorage(app, bucketHint);
+  const bucketName = bucketHint?.trim() || defaultBucketFromProjectId(projectId);
+  const storage = getWebStorage(app, bucketName);
   const name = file.name || "upload";
   const ext = name.includes(".") ? (name.split(".").pop() ?? "bin") : "bin";
-  const path = `imports/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
+  const prefix = sanitizeStorageFolder(folder);
+  const path = `${prefix}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${ext}`;
   const r = ref(storage, path);
   const contentType = file.type || "application/octet-stream";
   await uploadBytes(r, file, { contentType });
@@ -117,6 +131,7 @@ export async function uploadLocalFileViaWeb(
 export async function uploadLocalFileViaAdmin(
   serviceAccount: ServiceAccount,
   file: File,
+  opts?: { storageBucket?: string; folder?: string },
 ): Promise<string> {
   if (file.size > 25 * 1024 * 1024) {
     throw new Error("File is too large (max 25 MB)");
@@ -130,6 +145,8 @@ export async function uploadLocalFileViaAdmin(
       base64,
       contentType: file.type || "application/octet-stream",
       filename: file.name || "upload",
+      storageBucket: opts?.storageBucket,
+      folder: opts?.folder,
     }),
   });
   const j = (await res.json()) as { downloadUrl?: string; error?: string };
@@ -193,9 +210,16 @@ export async function resolvePendingImagesInRecord(
     app: FirebaseApp | null;
     fbConfig: FirebaseConfig | null;
     serviceAccount: ServiceAccount | null;
+    /** Bucket hostname (no gs://). Uses Firebase Console Storage bucket name. */
+    storageBucket?: string | null;
+    /** Folder prefix inside the bucket (default imports) */
+    storageFolder?: string;
   },
 ): Promise<void> {
   const memo = new Map<string, Promise<string>>();
+  const folder = opts.storageFolder ?? "imports";
+  const bucketForWeb =
+    opts.storageBucket?.trim() || opts.fbConfig?.storageBucket?.trim() || null;
 
   async function resolveOne(url: string): Promise<string> {
     const existing = memo.get(url);
@@ -203,10 +227,13 @@ export async function resolvePendingImagesInRecord(
     const p = (async () => {
       if (opts.authMode === "admin") {
         if (!opts.serviceAccount) throw new Error("Service account required for Storage upload");
-        return uploadSourceUrlViaAdmin(opts.serviceAccount, url);
+        return uploadSourceUrlViaAdmin(opts.serviceAccount, url, {
+          storageBucket: opts.storageBucket ?? undefined,
+          folder,
+        });
       }
       if (!opts.app || !opts.fbConfig?.projectId) throw new Error("Firebase app required for Storage upload");
-      return uploadSourceUrlViaWeb(opts.app, opts.fbConfig.storageBucket, opts.fbConfig.projectId, url);
+      return uploadSourceUrlViaWeb(opts.app, bucketForWeb ?? undefined, opts.fbConfig.projectId, url, folder);
     })();
     memo.set(url, p);
     return p;

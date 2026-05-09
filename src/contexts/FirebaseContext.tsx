@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
 import type { FirebaseApp } from "firebase/app";
 import { getAuth, signInAnonymously, type Auth } from "firebase/auth";
 import type { Firestore } from "firebase/firestore";
@@ -18,6 +18,13 @@ import {
   inferSchemaAdmin,
   type ServiceAccount,
 } from "@/services/adminFirestoreService";
+import {
+  defaultBucketFromProjectId,
+  loadPersistedBucket,
+  loadPersistedFolder,
+  persistStoragePrefs,
+  sanitizeStorageFolder,
+} from "@/lib/storagePrefs";
 
 export type CollectionInfo = {
   name: string;
@@ -41,6 +48,11 @@ type Ctx = {
   selectedCollection: string | null;
   step: number;
   setStep: (n: number) => void;
+  /** Bucket hostname only, e.g. myproj.firebasestorage.app */
+  storageBucketId: string;
+  /** Object path prefix inside the bucket (no leading slash) */
+  storageFolder: string;
+  setStoragePrefs: (prefs: { storageBucketId?: string; storageFolder?: string }) => void;
   connectWeb: (c: FirebaseConfig) => Promise<void>;
   connectAdmin: (sa: ServiceAccount) => Promise<void>;
   disconnect: () => Promise<void>;
@@ -62,6 +74,42 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
   const [collections, setCollections] = useState<CollectionInfo[]>([]);
   const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
   const [step, setStep] = useState<number>(1);
+  const [storageBucketId, setStorageBucketId] = useState("");
+  const [storageFolder, setStorageFolder] = useState("imports");
+
+  const projectId = config?.projectId ?? serviceAccount?.project_id ?? null;
+
+  useEffect(() => {
+    if (!projectId) return;
+    const pb = loadPersistedBucket();
+    const pf = loadPersistedFolder();
+    if (pb) {
+      setStorageBucketId(pb);
+    } else if (config?.storageBucket?.trim()) {
+      setStorageBucketId(config.storageBucket.trim());
+    } else {
+      setStorageBucketId(defaultBucketFromProjectId(projectId));
+    }
+    setStorageFolder(pf ? sanitizeStorageFolder(pf) : "imports");
+  }, [projectId, config?.storageBucket]);
+
+  useEffect(() => {
+    if (!projectId || !storageBucketId) return;
+    persistStoragePrefs(storageBucketId, storageFolder);
+  }, [projectId, storageBucketId, storageFolder]);
+
+  const setStoragePrefs = useCallback(
+    (prefs: { storageBucketId?: string; storageFolder?: string }) => {
+      if (prefs.storageBucketId !== undefined) {
+        const b = prefs.storageBucketId.trim() || (projectId ? defaultBucketFromProjectId(projectId) : "");
+        setStorageBucketId(b);
+      }
+      if (prefs.storageFolder !== undefined) {
+        setStorageFolder(sanitizeStorageFolder(prefs.storageFolder));
+      }
+    },
+    [projectId],
+  );
 
   const connectWeb = useCallback(
     async (c: FirebaseConfig) => {
@@ -150,7 +198,6 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
     setSelectedCollection(name);
   }, []);
 
-  const projectId = config?.projectId ?? serviceAccount?.project_id ?? null;
   const connected = authMode === "admin" ? !!serviceAccount : !!app;
 
   return (
@@ -169,6 +216,9 @@ export function FirebaseProvider({ children }: { children: ReactNode }) {
         selectedCollection,
         step,
         setStep,
+        storageBucketId,
+        storageFolder,
+        setStoragePrefs,
         connectWeb,
         connectAdmin,
         disconnect,

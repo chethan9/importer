@@ -18,13 +18,22 @@ const FIELDS: Array<{ key: keyof FirebaseConfig; label: string; placeholder: str
   { key: "apiKey", label: "API Key", placeholder: "AIzaSy…", required: true },
   { key: "authDomain", label: "Auth Domain", placeholder: "my-app.firebaseapp.com", required: true },
   { key: "projectId", label: "Project ID", placeholder: "my-app", required: true },
-  { key: "storageBucket", label: "Storage Bucket", placeholder: "my-app.appspot.com", required: false },
+  { key: "storageBucket", label: "Storage Bucket", placeholder: "my-app.firebasestorage.app", required: false },
   { key: "messagingSenderId", label: "Messaging Sender ID", placeholder: "123456789", required: false },
   { key: "appId", label: "App ID", placeholder: "1:123:web:abc", required: false },
 ];
 
 export function ConnectStep() {
-  const { connected, config: activeConfig, connectWeb, connectAdmin } = useFirebase();
+  const {
+    connected,
+    config: activeConfig,
+    connectWeb,
+    connectAdmin,
+    projectId,
+    storageBucketId,
+    storageFolder,
+    setStoragePrefs,
+  } = useFirebase();
   const { toast } = useToast();
   const [jsonText, setJsonText] = useState("");
   const [fieldsForm, setFieldsForm] = useState<FirebaseConfig>({
@@ -275,6 +284,50 @@ export function ConnectStep() {
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{localError}</AlertDescription>
         </Alert>
+      )}
+
+      {connected && projectId && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Firebase Storage</CardTitle>
+            <CardDescription>
+              Used for Image URL → “Upload to Storage” and the Storage image tool. Copy the bucket name from Firebase Console → Storage.
+              New projects usually use <code className="rounded bg-muted px-1 font-mono text-[11px]">{projectId}.firebasestorage.app</code>
+              ; older ones may use <code className="rounded bg-muted px-1 font-mono text-[11px]">{projectId}.appspot.com</code>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <Label htmlFor="importer-storage-bucket" className="text-xs">
+                Bucket ID
+              </Label>
+              <Input
+                id="importer-storage-bucket"
+                value={storageBucketId}
+                onChange={(e) => setStoragePrefs({ storageBucketId: e.target.value })}
+                className="mt-1 font-mono text-xs"
+                placeholder={`${projectId}.firebasestorage.app`}
+                autoComplete="off"
+              />
+            </div>
+            <div>
+              <Label htmlFor="importer-storage-folder" className="text-xs">
+                Upload folder
+              </Label>
+              <Input
+                id="importer-storage-folder"
+                value={storageFolder}
+                onChange={(e) => setStoragePrefs({ storageFolder: e.target.value })}
+                className="mt-1 font-mono text-xs"
+                placeholder="imports"
+                autoComplete="off"
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Files are written under this path inside the bucket (e.g. <span className="font-mono">imports/…</span>).
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
